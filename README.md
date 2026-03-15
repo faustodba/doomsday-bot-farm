@@ -75,8 +75,8 @@ main.py
 |--------|-------------|
 | `main.py` | Entry point, pool con semaforo, loop principale |
 | `raccolta.py` | Flusso raccolta risorse per singola istanza |
-| `allocation.py` | **NUOVO** Sistema decisionale allocazione slot (gap proporzionale) |
-| `runtime.py` | **NUOVO** Configurazione modificabile a runtime via JSON |
+| `allocation.py` | Sistema decisionale allocazione slot (gap proporzionale) |
+| `runtime.py` | Configurazione modificabile a runtime via JSON |
 | `alleanza.py` | Automazione menu Alleanza/Dono — schedulata |
 | `messaggi.py` | Raccolta messaggi in-game — schedulata |
 | `rifornimento.py` | Invio rifornimenti con delta OCR reale e soglie per risorsa |
@@ -115,7 +115,8 @@ pip install pillow pytesseract opencv-python
 ## 🚀 Avvio
 
 ```bash
-cd C:\Bot-raccolta\V5
+# Entra nella cartella dove hai clonato/scaricato il bot
+cd <cartella-installazione>
 
 # Avvio bot
 python main.py --emulatore 1
@@ -176,17 +177,18 @@ Disponibile dal 2° ciclo in poi. Visibile nella dashboard per istanza e aggrega
 
 ## 📁 File di output runtime
 
+Generati automaticamente nella cartella di installazione:
+
 ```
-C:\Bot-raccolta\V5\
-├── bot.log
-├── status.json
-├── runtime.json                     ← configurazione runtime
-├── timing.json
-├── rifornimento_stato_{nome}_{porta}.json
-├── schedule_stato_{nome}_{porta}.json
-└── debug\ciclo_NNN\
-    ├── report_ciclo_NNN.html
-    └── *.png
+bot.log
+status.json
+runtime.json                     ← configurazione runtime
+timing.json
+rifornimento_stato_{nome}_{porta}.json
+schedule_stato_{nome}_{porta}.json
+debug\ciclo_NNN\
+    report_ciclo_NNN.html
+    *.png
 ```
 
 ---
@@ -194,11 +196,8 @@ C:\Bot-raccolta\V5\
 ## 🗂️ Struttura repository
 
 ```
-V5\
 ├── *.py              ← moduli principali
-├── tests\            ← script di test e calibrazione
 ├── templates\        ← immagini template matching (avatar, pulsanti)
-├── archive\          ← versioni archiviate (non in uso)
 ├── runtime.json      ← config runtime (generato al primo avvio)
 ├── CONTEXT.md        ← contesto sessioni Claude
 ├── LICENSE           ← MIT License
@@ -222,15 +221,13 @@ V5\
 | V5.13 | Blacklist RESERVED/COMMITTED |
 | V5.13.2 | ETA marcia OCR, attesa dinamica |
 | V5.14 | OCR completo deposito, produzione inter-ciclo, schedulazione 12h, dashboard storico+diamanti+inviato |
-| V5.15 | allocation.py (gap decisionale 4 risorse), 4 tipi nodo + verifica territorio alleanza, soglie rifornimento per risorsa, runtime.json configurazione live, pannello Runtime in dashboard |
+| V5.15 | allocation.py (gap decisionale 4 risorse), 4 tipi nodo + verifica territorio alleanza, soglie rifornimento per risorsa, runtime.json configurazione live, pannello Runtime in dashboard, repo pulito su faustodba/doomsday-bot-farm |
 
 ---
 
 ## 📄 Licenza
 
 Distribuito sotto licenza **MIT** — vedi [LICENSE](LICENSE) per i dettagli.
-
-In sintesi: puoi usare, copiare, modificare e distribuire questo software liberamente, anche senza chiedere permesso, a condizione di mantenere il copyright originale. Il software è fornito senza alcuna garanzia.
 
 ---
 

@@ -5,9 +5,9 @@
 ---
 
 ## Repository
-- **URL:** https://github.com/faustodba/doomsday-bot
+- **URL:** https://github.com/faustodba/doomsday-bot-farm
 - **Branch principale:** main
-- **Percorso locale:** `C:\Bot-raccolta\V5`
+- **Percorso locale:** installabile in qualsiasi cartella
 
 ---
 
@@ -44,8 +44,8 @@ Bot Python per l'automazione del gioco **Doomsday: Last Survivors** su emulatori
 | `alleanza.py` | Automazione menu Alleanza/Dono — schedulata ogni 12h |
 | `messaggi.py` | Gestione messaggi in-game — schedulata ogni 12h |
 | `rifornimento.py` | Invio rifornimenti a FauMorfeus (V5.12) |
-| `allocation.py` | **NUOVO** Sistema decisionale allocazione slot raccolta (gap proporzionale) |
-| `runtime.py` | **NUOVO** Configurazione runtime modificabile senza riavvio bot |
+| `allocation.py` | Sistema decisionale allocazione slot raccolta (gap proporzionale) |
+| `runtime.py` | Configurazione runtime modificabile senza riavvio bot |
 | `bluestacks.py` | Gestione ciclo vita BlueStacks |
 | `mumu.py` | Gestione ciclo vita MuMuPlayer 12 |
 | `emulatore_base.py` | Modulo base condiviso tra emulatori |
@@ -267,12 +267,12 @@ RATIO_TARGET = {
 ### Sezioni
 - Riepilogo istanze (running/avvio/done/errori/inattive/squadre)
 - Risorse totali aggregate (pomodoro/legno/acciaio/petrolio/diamanti)
-- **Inviato FauMorfeus ciclo corrente** — aggregato per risorsa ← NUOVO
+- **Inviato FauMorfeus ciclo corrente** — aggregato per risorsa
 - Stato istanze (card per istanza)
-- Storico cicli (squadre/durata/sq-h/produzione/inviato) ← NUOVO colonna inviato
+- Storico cicli (squadre/durata/sq-h/produzione/inviato)
 
 ### Card istanza mostra
-- Deposito attuale (con diamanti) ← NUOVO diamanti
+- Deposito attuale (con diamanti)
 - Snapshot inter-ciclo (inizio_prec → inizio_corr)
 - Produzione ciclo (verde con segno +)
 - Inviato FauMorfeus corrente + precedente (giallo)
@@ -332,7 +332,7 @@ python dashboard_server.py
 | V5.13.1 | Fix SQUADRA hash check |
 | V5.13.2 | ETA marcia OCR + attesa dinamica blacklist |
 | V5.14 | OCR completo deposito, produzione inter-ciclo, schedulazione 12h, dashboard storico+diamanti+inviato, delta rifornimento OCR reale, layout barra per istanza, DOOMS_ACCOUNT/DOOMS_AVATAR, percorsi automatici BOT_DIR+_trova_exe |
-| V5.15 | allocation.py (gap decisionale 4 risorse), raccolta.py (acciaieria/raffineria + check territorio pixel), rifornimento.py (soglie per risorsa + delta OCR), runtime.py (config JSON senza riavvio), dashboard pannello Runtime, ocr.py fix import, tests/ cartella separata |
+| V5.15 | allocation.py (gap decisionale 4 risorse), raccolta.py (acciaieria/raffineria + check territorio pixel), rifornimento.py (soglie per risorsa + delta OCR), runtime.py (config JSON senza riavvio), dashboard pannello Runtime, repo pulito su faustodba/doomsday-bot-farm |
 
 ---
 
@@ -340,9 +340,9 @@ python dashboard_server.py
 Dire a Claude: **"leggi il contesto"**
 Claude eseguirà:
 ```
-web_fetch → https://raw.githubusercontent.com/faustodba/doomsday-bot/main/CONTEXT.md
+web_fetch → https://raw.githubusercontent.com/faustodba/doomsday-bot-farm/main/CONTEXT.md
 ```
 
 ---
 
-*Ultimo aggiornamento: 2026-03-15 (sessione pomeriggio)*
+*Ultimo aggiornamento: 2026-03-15 (sessione pulizia repo)*
