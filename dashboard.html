@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doomsday Bot V5 — Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:        #0e1117;
+    --bg2:       #161b25;
+    --bg3:       #1e2535;
+    --border:    #2a3348;
+    --accent:    #e8a020;
+    --accent2:   #c07818;
+    --green:     #22c55e;
+    --green-bg:  rgba(34,197,94,0.08);
+    --red:       #ef4444;
+    --red-bg:    rgba(239,68,68,0.08);
+    --yellow:    #f59e0b;
+    --yellow-bg: rgba(245,158,11,0.08);
+    --blue:      #60a5fa;
+    --blue-bg:   rgba(96,165,250,0.08);
+    --text:      #e2e8f0;
+    --text-dim:  #64748b;
+    --text-mid:  #94a3b8;
+    --mono:      'Share Tech Mono', monospace;
+    --sans:      'Barlow Condensed', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; padding: 20px 24px 32px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 14px 20px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; border-left: 3px solid var(--accent); }
+  .logo { display: flex; align-items: baseline; gap: 12px; }
+  .logo h1 { font-family: var(--sans); font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 3px; }
+  .logo .version { font-size: 11px; color: var(--text-dim); letter-spacing: 2px; border: 1px solid var(--border); padding: 2px 7px; border-radius: 3px; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .bot-status { font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 7px; color: var(--text); letter-spacing: 1px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dot.running { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.4s infinite; }
+  .dot.waiting { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); animation: pulse 2s infinite; }
+  .dot.stopped { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .last-update { font-size: 10px; color: var(--text-dim); }
+
+  .refresh-bar { height: 2px; background: var(--border); margin-bottom: 16px; overflow: hidden; border-radius: 1px; }
+  .refresh-bar-inner { height: 100%; background: var(--accent); animation: refill 3s linear infinite; }
+  @keyframes refill { from{width:100%} to{width:0%} }
+
+  .conn-error { display: none; background: var(--red-bg); border: 1px solid rgba(239,68,68,0.3); border-radius: 5px; padding: 10px 16px; font-size: 12px; color: var(--red); margin-bottom: 14px; }
+
+  .countdown-bar { background: var(--yellow-bg); border: 1px solid rgba(245,158,11,0.25); border-radius: 5px; padding: 10px 16px; margin-bottom: 14px; font-size: 12px; color: var(--yellow); display: flex; align-items: center; gap: 14px; }
+  .countdown-bar.hidden { display: none; }
+  .countdown-progress { flex: 1; height: 4px; background: rgba(245,158,11,0.15); border-radius: 2px; overflow: hidden; }
+  .countdown-fill { height: 100%; background: var(--yellow); transition: width 1s linear; }
+
+  .info-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .info-chip { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 5px 12px; font-size: 11px; color: var(--text-dim); }
+  .info-chip span { color: var(--accent); margin-left: 6px; font-weight: bold; }
+
+  .section-title { font-family: var(--sans); font-size: 10px; font-weight: 400; letter-spacing: 4px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; margin-top: 22px; display: flex; align-items: center; gap: 10px; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  .summary-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; text-align: center; }
+  .summary-card .num { font-family: var(--sans); font-size: 36px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .summary-card .lbl { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; }
+  .num.running { color: var(--green); }
+  .num.avvio   { color: var(--yellow); }
+  .num.done    { color: var(--blue); }
+  .num.error   { color: var(--red); }
+  .num.idle    { color: var(--text-dim); }
+  .num.accent  { color: var(--accent); }
+
+  .aggregate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .agg-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .agg-icon { font-size: 22px; flex-shrink: 0; }
+  .agg-info { flex: 1; }
+  .agg-val { font-family: var(--sans); font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .agg-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-top: 2px; }
+  .agg-sub { font-size: 10px; color: var(--text-mid); margin-top: 1px; }
+
+  /* ── ISTANZE ── */
+  .instances-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .instance-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; position: relative; overflow: hidden; }
+  .instance-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--border); }
+  .instance-card.running { border-color: rgba(34,197,94,0.3);  background: linear-gradient(135deg, var(--bg2), var(--green-bg)); }
+  .instance-card.running::before { background: var(--green); }
+  .instance-card.avvio   { border-color: rgba(245,158,11,0.3); background: linear-gradient(135deg, var(--bg2), var(--yellow-bg)); }
+  .instance-card.avvio::before   { background: var(--yellow); }
+  .instance-card.done    { border-color: rgba(96,165,250,0.3); background: linear-gradient(135deg, var(--bg2), var(--blue-bg)); }
+  .instance-card.done::before    { background: var(--blue); }
+  .instance-card.error   { border-color: rgba(239,68,68,0.3);  background: linear-gradient(135deg, var(--bg2), var(--red-bg)); }
+  .instance-card.error::before   { background: var(--red); }
+  .instance-card.idle    { opacity: 0.5; }
+
+  .instance-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .instance-name { font-family: var(--sans); font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--text); }
+  .badge { font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; }
+  .badge.idle    { background: rgba(100,116,139,0.2); color: var(--text-dim); }
+  .badge.avvio   { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .badge.running { background: rgba(34,197,94,0.15);  color: var(--green); }
+  .badge.done    { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .badge.error   { background: rgba(239,68,68,0.15);  color: var(--red); }
+  .badge.storico { background: rgba(100,116,139,0.12); color: var(--text-dim); font-style: italic; font-size: 9px; letter-spacing: 0; }
+
+  .sub-section { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 7px; }
+  .sub-title { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; }
+
+  .res-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+  .res-item  { font-size: 11px; display: flex; justify-content: space-between; color: var(--text-dim); }
+  .res-item  span:last-child { color: var(--text); }
+
+  .prod-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+  .prod-item { font-size: 11px; display: flex; justify-content: space-between; }
+  .prod-item span:first-child { color: var(--text-dim); }
+  .prod-pos  { color: var(--green); font-weight: bold; }
+  .prod-neg  { color: var(--red);   font-weight: bold; }
+  .prod-na   { color: var(--text-dim); }
+
+  .inv-item  { font-size: 11px; display: flex; justify-content: space-between; color: var(--text-dim); }
+  .inv-item  span:last-child { color: var(--yellow); }
+
+  .instance-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+  .instance-row span:last-child { color: var(--text); }
+  .instance-row span.warn { color: var(--red); }
+  .instance-row span.ok   { color: var(--green); }
+
+  .squadre-bar-track { height: 3px; background: var(--border); border-radius: 2px; margin-top: 2px; overflow: hidden; }
+  .squadre-bar-fill  { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.5s; }
+
+  /* ── STORICO ── */
+  .storico-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .storico-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .storico-table th { text-align: left; color: var(--text-dim); font-weight: normal; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; background: var(--bg3); }
+  .storico-table td { padding: 7px 14px; border-bottom: 1px solid rgba(42,51,72,0.5); color: var(--text); vertical-align: middle; }
+  .storico-table tr:last-child td { border-bottom: none; }
+  .storico-table tr:hover td { background: var(--bg3); }
+  .storico-table td.accent { color: var(--accent); font-weight: bold; }
+  .storico-table td.green  { color: var(--green);  font-weight: bold; }
+  .storico-table td.dim    { color: var(--text-dim); }
+  .storico-table td.blue   { color: var(--blue); }
+  .prod-cell { font-size: 11px; }
+  .prod-cell span { display: inline-block; margin-right: 10px; white-space: nowrap; }
+
+  footer { padding-top: 14px; font-size: 10px; color: var(--text-dim); display: flex; justify-content: space-between; align-items: center; margin-top: 28px; border-top: 1px solid var(--border); letter-spacing: 1px; }
+
+  /* ── LAYOUT PRINCIPALE: colonna sinistra istanze + colonna destra sidebar ── */
+  .main-layout { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .main-layout { grid-template-columns: 1fr; } }
+
+  /* ── SIDEBAR DESTRA ── */
+  .sidebar { display: flex; flex-direction: column; gap: 12px; }
+  .sidebar-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .sidebar-title { font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; }
+  .sidebar-kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+  .sidebar-kpi { text-align: center; padding: 6px 4px; background: var(--bg3); border-radius: 4px; }
+  .sidebar-kpi .val { font-family: var(--sans); font-size: 22px; font-weight: 700; line-height: 1; }
+  .sidebar-kpi .lbl { font-size: 8px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+  .sidebar-res { display: flex; flex-direction: column; gap: 5px; }
+  .sidebar-res-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+  .sidebar-res-row .ico { font-size: 14px; flex-shrink: 0; }
+  .sidebar-res-row .val { color: var(--accent); font-weight: bold; font-family: var(--sans); font-size: 14px; }
+  .sidebar-res-row .sub { font-size: 9px; color: var(--text-dim); margin-left: 4px; }
+
+  /* ── RUNTIME PANEL ── */
+  .rt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .rt-grid { grid-template-columns: 1fr; } }
+  .rt-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+  .rt-card h3 { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 12px; }
+  .rt-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+  .rt-row label { color: var(--text-mid); flex: 1; }
+  .rt-row input[type=number], .rt-row input[type=text] { width: 80px; background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 3px 7px; font-family: var(--mono); font-size: 12px; text-align: right; }
+  .rt-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+  .rt-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-mid); cursor: pointer; }
+  .rt-save-btn { margin-top: 14px; width: 100%; padding: 8px; background: var(--accent); color: #000; border: none; border-radius: 4px; font-family: var(--mono); font-size: 12px; font-weight: bold; cursor: pointer; letter-spacing: 1px; transition: background 0.2s; }
+  .rt-save-btn:hover { background: var(--accent2); color: #fff; }
+  .rt-save-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; }
+  .rt-msg { margin-top: 8px; font-size: 11px; text-align: center; min-height: 16px; }
+  .rt-msg.ok  { color: var(--green); }
+  .rt-msg.err { color: var(--red); }
+  .ist-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+  .ist-table th { color: var(--text-dim); font-weight: normal; padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  .ist-table td { padding: 4px 6px; border-bottom: 1px solid rgba(42,51,72,0.4); vertical-align: middle; }
+  .ist-table input[type=number] { width: 60px; background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 5px; font-family: var(--mono); font-size: 11px; text-align: right; }
+  .ist-table input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+  .ist-table select { background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 4px; font-family: var(--mono); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <h1>☣ Doomsday Bot</h1>
+    <span class="version">V5 DASHBOARD</span>
+  </div>
+  <div class="header-right">
+    <div class="bot-status">
+      <span class="dot stopped" id="botDot"></span>
+      <span id="botLabel">FERMO</span>
+    </div>
+    <div class="last-update" id="lastUpdate">—</div>
+  </div>
+</header>
+
+<div class="refresh-bar"><div class="refresh-bar-inner"></div></div>
+<div class="conn-error" id="connError">⚠ Impossibile leggere status.json — server HTTP non attivo (porta 8080).</div>
+
+<div class="info-bar">
+  <div class="info-chip">Emulatore <span id="emuLabel">—</span></div>
+  <div class="info-chip">Ciclo <span id="cicloLabel">—</span></div>
+  <div class="info-chip">Aggiornato <span id="timeLabel">—</span></div>
+  <div class="info-chip">Squadre ciclo <span id="squadreCicloLabel">—</span></div>
+</div>
+
+<div class="countdown-bar hidden" id="countdownBar">
+  <span id="countdownLabel">⏳ prossimo ciclo in —</span>
+  <div class="countdown-progress"><div class="countdown-fill" id="countdownFill" style="width:100%"></div></div>
+</div>
+
+<!-- LAYOUT PRINCIPALE: colonna istanze (sx) + sidebar statistiche (dx) -->
+<div class="main-layout">
+
+  <!-- ── COLONNA SINISTRA: istanze ── -->
+  <div>
+    <div class="section-title">Stato Istanze</div>
+    <div class="instances-grid" id="instancesGrid"></div>
+
+    <div class="section-title">Storico Cicli</div>
+    <div class="storico-wrap">
+      <table class="storico-table">
+        <thead>
+          <tr>
+            <th>Ciclo</th><th>Ora</th><th>Squadre</th><th>Durata</th><th>Sq/h</th><th>Produzione</th><th>Inviato <span class="dooms-account-lbl">—</span></th>
+          </tr>
+        </thead>
+        <tbody id="storicoBody">
+          <tr><td colspan="7" class="dim" style="padding:12px 14px">Nessun ciclo completato</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── COLONNA DESTRA: sidebar statistiche ── -->
+  <div class="sidebar">
+
+    <!-- Riepilogo contatori -->
+    <div class="sidebar-card">
+      <div class="sidebar-title">Riepilogo istanze</div>
+      <div class="sidebar-kpi-grid">
+        <div class="sidebar-kpi"><div class="val running" id="cntRunning">0</div><div class="lbl">Raccolta</div></div>
+        <div class="sidebar-kpi"><div class="val avvio"   id="cntAvvio">0</div><div class="lbl">Avvio</div></div>
+        <div class="sidebar-kpi"><div class="val done"    id="cntDone">0</div><div class="lbl">Done</div></div>
+        <div class="sidebar-kpi"><div class="val error"   id="cntError">0</div><div class="lbl">Errori</div></div>
+        <div class="sidebar-kpi"><div class="val idle"    id="cntIdle">0</div><div class="lbl">Inattive</div></div>
+        <div class="sidebar-kpi"><div class="val accent"  id="cntSquadre">0</div><div class="lbl">Squadre</div></div>
+      </div>
+    </div>
+
+    <!-- Risorse totali deposito -->
+    <div class="sidebar-card">
+      <div class="sidebar-title">Risorse totali deposito</div>
+      <div class="sidebar-res">
+        <div class="sidebar-res-row"><span class="ico">🍅</span><span style="flex:1;color:var(--text-dim);font-size:10px">Pomodoro</span><span class="val" id="aggPomodoro">—</span><span class="sub" id="aggPomodoroCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">🪵</span><span style="flex:1;color:var(--text-dim);font-size:10px">Legno</span><span class="val" id="aggLegno">—</span><span class="sub" id="aggLegnoCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">⚙️</span><span style="flex:1;color:var(--text-dim);font-size:10px">Acciaio</span><span class="val" id="aggAcciaio">—</span><span class="sub" id="aggAcciaioCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">🛢️</span><span style="flex:1;color:var(--text-dim);font-size:10px">Petrolio</span><span class="val" id="aggPetrolio">—</span><span class="sub" id="aggPetrolioCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">💎</span><span style="flex:1;color:var(--text-dim);font-size:10px">Diamanti</span><span class="val" id="aggDiamanti">—</span><span class="sub" id="aggDiamantiCnt"></span></div>
+      </div>
+    </div>
+
+    <!-- Inviato ciclo corrente -->
+    <div class="sidebar-card">
+      <div class="sidebar-title">Inviato <span id="doomsAccount">—</span></div>
+      <div class="sidebar-res">
+        <div class="sidebar-res-row"><span class="ico">🍅</span><span style="flex:1;color:var(--text-dim);font-size:10px">Pomodoro</span><span class="val" style="color:var(--yellow)" id="invPomodoro">—</span><span class="sub" id="invPomodoroCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">🪵</span><span style="flex:1;color:var(--text-dim);font-size:10px">Legno</span><span class="val" style="color:var(--yellow)" id="invLegno">—</span><span class="sub" id="invLegnoCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">⚙️</span><span style="flex:1;color:var(--text-dim);font-size:10px">Acciaio</span><span class="val" style="color:var(--yellow)" id="invAcciaio">—</span><span class="sub" id="invAcciaioCnt"></span></div>
+        <div class="sidebar-res-row"><span class="ico">🛢️</span><span style="flex:1;color:var(--text-dim);font-size:10px">Petrolio</span><span class="val" style="color:var(--yellow)" id="invPetrolio">—</span><span class="sub" id="invPetrolioCnt"></span></div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /main-layout -->
+
+<div class="section-title">⚙ Configurazione Runtime</div>
+<div class="rt-grid">
+
+  <!-- Parametri globali -->
+  <div class="rt-card">
+    <h3>Parametri globali</h3>
+    <div class="rt-row"><label>Istanze parallele</label><input type="number" id="rt_blocco" min="1" max="10" step="1"></div>
+    <div class="rt-row"><label>Attesa tra cicli (min)</label><input type="number" id="rt_wait" min="1" max="60" step="1"></div>
+    <div class="rt-row"><label>Rifornimento abilitato</label><input type="checkbox" id="rt_rif_on"></div>
+    <div class="rt-row"><label>Soglia invio pomodoro/legno (M)</label><input type="number" id="rt_soglia" min="0.1" max="50" step="0.5"></div>
+    <div class="rt-row"><label>Soglia invio petrolio (M)</label><input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5"></div>
+    <h3 style="margin-top:14px">Allocation ratio</h3>
+    <div class="rt-row"><label>🍅 Campo (pomodoro) %</label><input type="number" id="rt_r_campo" min="0" max="100" step="1"></div>
+    <div class="rt-row"><label>🪵 Segheria (legno) %</label><input type="number" id="rt_r_seg" min="0" max="100" step="1"></div>
+    <div class="rt-row"><label>🛢 Petrolio %</label><input type="number" id="rt_r_pet" min="0" max="100" step="1"></div>
+    <div class="rt-row"><label>⚙ Acciaio %</label><input type="number" id="rt_r_acc" min="0" max="100" step="1"></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:4px" id="rt_ratio_sum">Totale: —</div>
+    <button class="rt-save-btn" id="rt_save_globali" onclick="rtSalvaGlobali()">💾 SALVA GLOBALI</button>
+    <div class="rt-msg" id="rt_msg_globali"></div>
+  </div>
+
+  <!-- Istanze -->
+  <div class="rt-card">
+    <h3>Istanze</h3>
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <label class="rt-toggle"><input type="radio" name="rt_emu" value="bs" checked onchange="rtCaricaIstanze()"> BlueStacks</label>
+      <label class="rt-toggle"><input type="radio" name="rt_emu" value="mumu" onchange="rtCaricaIstanze()"> MuMuPlayer</label>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="ist-table">
+        <thead><tr>
+          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th>
+        </tr></thead>
+        <tbody id="rt_ist_tbody"></tbody>
+      </table>
+    </div>
+    <button class="rt-save-btn" id="rt_save_ist" onclick="rtSalvaIstanze()" style="margin-top:12px">💾 SALVA ISTANZE</button>
+    <div class="rt-msg" id="rt_msg_ist"></div>
+  </div>
+
+</div>
+
+<footer>
+  <span>Auto-refresh ogni 3 secondi</span>
+  <span id="footerInfo">—</span>
+</footer>
+
+<script>
+const STATUS_FILE = "status.json";
+const REFRESH_MS  = 3000;
+const RES_KEYS    = ["pomodoro","legno","acciaio","petrolio"];
+const RES_ICO     = { pomodoro:"🍅", legno:"🪵", acciaio:"⚙️", petrolio:"🛢️", diamanti:"💎" };
+
+const STATO_MAP = {
+  "attesa":"idle", "avvio":"avvio", "caricamento":"avvio",
+  "raccolta":"running", "completata":"done",
+  "errore":"error", "timeout":"error", "watchdog":"error",
+};
+const STATI_LABEL = { idle:"INATTIVA", avvio:"AVVIO", running:"RACCOLTA", done:"COMPLETATA", error:"ERRORE" };
+
+let _waitTotal = 0;
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(STATUS_FILE + "?t=" + Date.now());
+    if (!res.ok) throw new Error();
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+function fmtM(v) {
+  if (v === undefined || v === null || v < 0) return "—";
+  return v.toFixed(1) + "M";
+}
+
+function fmtProd(v) {
+  if (v === undefined || v === null || v < 0) return { txt:"—", cls:"prod-na" };
+  if (v === 0) return { txt:"0.0M", cls:"prod-na" };
+  return { txt:"+" + v.toFixed(1) + "M", cls:"prod-pos" };
+}
+
+function aggRisorsa(istanze, campo) {
+  let sum = 0, cnt = 0, tot = Object.keys(istanze).length;
+  for (const n in istanze) {
+    const v = istanze[n][campo];
+    if (v !== undefined && v >= 0) { sum += v; cnt++; }
+  }
+  return { sum, cnt, tot };
+}
+
+function aggiorna(data) {
+  const errDiv = document.getElementById("connError");
+  if (!data) { errDiv.style.display = "block"; return; }
+  errDiv.style.display = "none";
+
+  // Header stato
+  const botStato = data.stato || "idle";
+  const running  = botStato === "running";
+  const waiting  = botStato === "waiting";
+  document.getElementById("botDot").className      = "dot " + (running?"running":waiting?"waiting":"stopped");
+  document.getElementById("botLabel").textContent  = running?"IN ESECUZIONE":waiting?"IN ATTESA":"FERMO";
+  const ts = data.ts_aggiornato || "—";
+  document.getElementById("emuLabel").textContent   = data.emulatore || "—";
+  // Aggiorna label account destinatario rifornimento
+  const doomsAcc = data.dooms_account || "destinatario";
+  document.querySelectorAll("#doomsAccount, .dooms-account-lbl").forEach(el => el.textContent = doomsAcc);
+  document.getElementById("cicloLabel").textContent = data.ciclo ?? "—";
+  document.getElementById("timeLabel").textContent  = ts;
+  document.getElementById("lastUpdate").textContent = "aggiornato " + ts;
+  document.getElementById("footerInfo").textContent = "ciclo " + (data.ciclo ?? 0) + " · " + ts;
+
+  // Countdown
+  const cdBar = document.getElementById("countdownBar");
+  const cdSec = data.countdown_s || 0;
+  if (waiting && cdSec > 0) {
+    cdBar.classList.remove("hidden");
+    const m = Math.floor(cdSec/60), s = cdSec%60;
+    document.getElementById("countdownLabel").textContent = `⏳ prossimo ciclo in ${m}:${String(s).padStart(2,"0")}`;
+    if (cdSec > _waitTotal) _waitTotal = cdSec;
+    document.getElementById("countdownFill").style.width = (_waitTotal>0 ? cdSec/_waitTotal*100 : 100) + "%";
+  } else {
+    cdBar.classList.add("hidden");
+    if (!waiting) _waitTotal = 0;
+  }
+
+  const istanze = data.istanze || {};
+
+  // Contatori summary
+  const cnt = {idle:0, avvio:0, running:0, done:0, error:0};
+  let squadreTot = 0;
+  for (const n in istanze) {
+    const css = STATO_MAP[istanze[n].stato||"attesa"] || "idle";
+    cnt[css]++;
+    squadreTot += (istanze[n].squadre_inviate || 0);
+  }
+  document.getElementById("cntRunning").textContent = cnt.running;
+  document.getElementById("cntAvvio").textContent   = cnt.avvio;
+  document.getElementById("cntDone").textContent    = cnt.done;
+  document.getElementById("cntError").textContent   = cnt.error;
+  document.getElementById("cntIdle").textContent    = cnt.idle;
+  document.getElementById("cntSquadre").textContent = squadreTot;
+  document.getElementById("squadreCicloLabel").textContent = squadreTot;
+
+  // Aggregate risorse deposito
+  const aggIds  = ["aggPomodoro","aggLegno","aggAcciaio","aggPetrolio"];
+  const aggCIds = ["aggPomodoroCnt","aggLegnoCnt","aggAcciaioCnt","aggPetrolioCnt"];
+  RES_KEYS.forEach((r, i) => {
+    const { sum, cnt: c, tot } = aggRisorsa(istanze, r);
+    document.getElementById(aggIds[i]).textContent  = c>0 ? sum.toFixed(1)+"M" : "—";
+    document.getElementById(aggCIds[i]).textContent = c>0 ? `${c}/${tot} istanze` : "nessun dato";
+  });
+
+  // Diamanti aggregati
+  let diaSum = 0, diaCnt = 0;
+  for (const n in istanze) {
+    const d = istanze[n].diamanti??-1;
+    if (d >= 0) { diaSum += d; diaCnt++; }
+  }
+  document.getElementById("aggDiamanti").textContent  = diaCnt>0 ? diaSum.toLocaleString("it-IT") : "—";
+  document.getElementById("aggDiamantiCnt").textContent = diaCnt>0 ? `${diaCnt}/${Object.keys(istanze).length} istanze` : "nessun dato";
+
+  // Inviato account destinatario aggregato (ciclo corrente)
+  const invIds  = ["invPomodoro","invLegno","invAcciaio","invPetrolio"];
+  const invCIds = ["invPomodoroCnt","invLegnoCnt","invAcciaioCnt","invPetrolioCnt"];
+  RES_KEYS.forEach((r, i) => {
+    let sum=0, cnt=0, tot=Object.keys(istanze).length;
+    for (const n in istanze) {
+      const v = (istanze[n].res_inviato||{})[r]??-1;
+      if (v > 0) { sum += v; cnt++; }
+    }
+    document.getElementById(invIds[i]).textContent  = cnt>0 ? sum.toFixed(1)+"M" : "—";
+    document.getElementById(invCIds[i]).textContent = cnt>0 ? `${cnt}/${tot} istanze` : "nessun dato";
+  });
+
+  // Griglia istanze — ordinate per stato
+  const grid = document.getElementById("instancesGrid");
+  grid.innerHTML = "";
+  // Ordine: live prima (running→avvio→done→idle→error), storiche in fondo
+  const ordine = ["running","avvio","done","idle","error"];
+  const nomi = Object.keys(istanze).sort((a,b) => {
+    const sa = istanze[a].dati_storici===true ? 1 : 0;
+    const sb = istanze[b].dati_storici===true ? 1 : 0;
+    if (sa !== sb) return sa - sb;
+    const ca = ordine.indexOf(STATO_MAP[istanze[a].stato||"attesa"]||"idle");
+    const cb = ordine.indexOf(STATO_MAP[istanze[b].stato||"attesa"]||"idle");
+    return ca-cb || a.localeCompare(b);
+  });
+
+  for (const nome of nomi) {
+    const ist      = istanze[nome];
+    const css      = STATO_MAP[ist.stato||"attesa"] || "idle";
+    const card     = document.createElement("div");
+    card.className = "instance-card " + css;
+
+    // Intestazione
+    const storico    = ist.dati_storici === true;
+    const tsUltimo   = ist.ts_ultimo_ciclo || "";
+    const badgeClass = storico ? "storico" : css;
+    const badgeLabel = storico
+      ? (tsUltimo ? `storico ${tsUltimo}` : "storico")
+      : (STATI_LABEL[css] || ist.stato);
+    card.innerHTML = `
+      <div class="instance-header">
+        <div class="instance-name">${nome}</div>
+        <div class="badge ${badgeClass}">${badgeLabel}</div>
+      </div>`;
+    // Card storiche: opacità ridotta ma dati visibili
+    if (storico) card.style.opacity = "0.75";
+
+    // Squadre + barra
+    const target = ist.squadre_target || 0, inviate = ist.squadre_inviate || 0;
+    if (target > 0) {
+      const pct = Math.min(100, inviate/target*100);
+      const d = document.createElement("div");
+      d.innerHTML = `
+        <div class="instance-row">
+          <span>Squadre</span>
+          <span class="${inviate>=target?'ok':''}">${inviate} / ${target}</span>
+        </div>
+        <div class="squadre-bar-track"><div class="squadre-bar-fill" style="width:${pct}%"></div></div>`;
+      card.appendChild(d);
+    }
+
+    // ── Deposito attuale ──
+    const hasRis = RES_KEYS.some(k => ist[k]!==undefined && ist[k]>=0) || (ist.diamanti??-1)>=0;
+    if (hasRis) {
+      const sec = document.createElement("div");
+      sec.className = "sub-section";
+      sec.innerHTML = `<div class="sub-title">Deposito attuale</div>`;
+      const rg = document.createElement("div");
+      rg.className = "res-grid";
+      RES_KEYS.forEach(k => {
+        if (ist[k]===undefined || ist[k]<0) return;
+        rg.innerHTML += `<div class="res-item"><span>${RES_ICO[k]} ${k}</span><span>${fmtM(ist[k])}</span></div>`;
+      });
+      // Diamanti — numero intero con separatore migliaia
+      if ((ist.diamanti??-1) >= 0) {
+        rg.innerHTML += `<div class="res-item"><span>💎 diamanti</span><span>${ist.diamanti.toLocaleString("it-IT")}</span></div>`;
+      }
+      sec.appendChild(rg); card.appendChild(sec);
+    }
+
+    // ── Snapshot inter-ciclo: inizio_prec → inizio_corrente ──
+    const ri_prec = ist.res_inizio_ciclo_prec || {}, ri_curr = ist.res_inizio || {};
+    const hasSnap = RES_KEYS.some(k => (ri_prec[k]??-1)>=0 || (ri_curr[k]??-1)>=0);
+    if (hasSnap) {
+      const sec = document.createElement("div");
+      sec.className = "sub-section";
+      sec.innerHTML = `<div class="sub-title">Snapshot (ciclo prec → ciclo corr)</div>`;
+      const rg = document.createElement("div");
+      rg.className = "res-grid";
+      RES_KEYS.forEach(k => {
+        const vp = ri_prec[k]??-1, vc = ri_curr[k]??-1;
+        if (vp<0 && vc<0) return;
+        rg.innerHTML += `<div class="res-item"><span>${RES_ICO[k]}</span><span>${fmtM(vp)} → ${fmtM(vc)}</span></div>`;
+      });
+      sec.appendChild(rg); card.appendChild(sec);
+    }
+
+    // ── Produzione ciclo (inter-ciclo: disponibile dal 2° ciclo) ──
+    const prod = ist.produzione || {};
+    const hasProd = RES_KEYS.some(k => (prod[k]??-1)>=0);
+    if (hasProd) {
+      const sec = document.createElement("div");
+      sec.className = "sub-section";
+      sec.innerHTML = `<div class="sub-title">Produzione (vs ciclo prec)</div>`;
+      const pg = document.createElement("div");
+      pg.className = "prod-grid";
+      RES_KEYS.forEach(k => {
+        if ((prod[k]??-1)<0) return;
+        const {txt, cls} = fmtProd(prod[k]);
+        pg.innerHTML += `<div class="prod-item"><span>${RES_ICO[k]} ${k}</span><span class="${cls}">${txt}</span></div>`;
+      });
+      sec.appendChild(pg); card.appendChild(sec);
+    }
+
+    // ── Inviato FauMorfeus ──
+    // res_inviato = ciclo corrente in accumulo
+    // res_inviato_prec = ciclo precedente confermato (usato per calcolo produzione)
+    const inv      = ist.res_inviato      || {};
+    const inv_prec = ist.res_inviato_prec || {};
+    const hasInv      = RES_KEYS.some(k => (inv[k]??-1)>0);
+    const hasInvPrec  = RES_KEYS.some(k => (inv_prec[k]??-1)>0);
+    if (hasInv || hasInvPrec) {
+      const sec = document.createElement("div");
+      sec.className = "sub-section";
+      sec.innerHTML = `<div class="sub-title">Inviato <span class="dooms-account-lbl">—</span></div>`;
+      const ig = document.createElement("div");
+      ig.className = "res-grid";
+      RES_KEYS.forEach(k => {
+        const vc = inv[k]??-1, vp = inv_prec[k]??-1;
+        if (vc<=0 && vp<=0) return;
+        const corrente = vc>0 ? fmtM(vc) : "—";
+        const prec     = vp>0 ? ` (prec: ${fmtM(vp)})` : "";
+        ig.innerHTML += `<div class="inv-item"><span>${RES_ICO[k]} ${k}</span><span>${corrente}<span style="color:var(--text-dim);font-size:10px">${prec}</span></span></div>`;
+      });
+      sec.appendChild(ig); card.appendChild(sec);
+    }
+
+    // ── Info extra (durata, errori, ts_inizio) ──
+    let extraHtml = "";
+    if (ist.durata_s > 0) { const dm=Math.floor(ist.durata_s/60),ds=ist.durata_s%60; extraHtml += `<div class="instance-row"><span>⏱ Durata</span><span>${dm}m ${ds}s</span></div>`; }
+    if (ist.ocr_fail  > 0) extraHtml += `<div class="instance-row"><span>OCR fail</span><span class="warn">${ist.ocr_fail}</span></div>`;
+    if (ist.cnt_errati> 0) extraHtml += `<div class="instance-row"><span>Cnt errati</span><span class="warn">${ist.cnt_errati}</span></div>`;
+    if (ist.ts_inizio)     extraHtml += `<div class="instance-row"><span>Inizio</span><span>${ist.ts_inizio}</span></div>`;
+    if (extraHtml) {
+      const ed = document.createElement("div");
+      ed.className = "sub-section";
+      ed.innerHTML = extraHtml;
+      card.appendChild(ed);
+    }
+
+    grid.appendChild(card);
+  }
+
+  // Storico cicli — max 10 righe
+  const storico = (data.storico_cicli || []).slice(-10);
+  const tbody   = document.getElementById("storicoBody");
+  if (storico.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="dim" style="padding:12px 14px">Nessun ciclo completato</td></tr>';
+  } else {
+    tbody.innerHTML = "";
+    [...storico].reverse().forEach(c => {
+      const sqH = c.durata_m > 0 ? (c.squadre/c.durata_m*60).toFixed(1) : "—";
+      const prod = c.produzione || {};
+      let prodHtml = "";
+      RES_KEYS.forEach(k => {
+        const v = prod[k];
+        if (v===undefined || v<0) return;
+        prodHtml += `<span>${RES_ICO[k]} <b style="color:var(--green)">${v.toFixed(1)}M</b></span>`;
+      });
+      const tr = document.createElement("tr");
+      // Inviato aggregato ciclo
+      const inv = c.inviato || {};
+      let invHtml = "";
+      RES_KEYS.forEach(k => {
+        const v = inv[k];
+        if (v===undefined || v<=0) return;
+        invHtml += `<span>${RES_ICO[k]} <b style="color:var(--yellow)">${v.toFixed(1)}M</b></span>`;
+      });
+      tr.innerHTML = `
+        <td class="accent">#${c.ciclo}</td>
+        <td class="dim">${c.ts||"—"}</td>
+        <td class="green">${c.squadre}</td>
+        <td class="dim">${c.durata_m} min</td>
+        <td class="blue">${sqH}/h</td>
+        <td class="prod-cell">${prodHtml||'<span style="color:var(--text-dim)">—</span>'}</td>
+        <td class="prod-cell">${invHtml||'<span style="color:var(--text-dim)">—</span>'}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+async function loop() {
+  const data = await fetchStatus();
+  aggiorna(data);
+  setTimeout(loop, REFRESH_MS);
+}
+loop();
+</script>
+<script>
+// ==============================================================================
+//  Runtime panel — carica/salva runtime.json via fetch
+// ==============================================================================
+
+let _rtData = null;  // cache locale del runtime.json
+
+// Carica runtime.json e popola i form
+async function rtCarica() {
+  try {
+    const res = await fetch("runtime.json?t=" + Date.now());
+    if (!res.ok) return;
+    _rtData = await res.json();
+    rtPopolaGlobali(_rtData);
+    rtCaricaIstanze();
+  } catch(e) { /* server non ancora avviato */ }
+}
+
+function rtPopolaGlobali(rt) {
+  const g = rt.globali || {};
+  _setVal("rt_blocco",      g.ISTANZE_BLOCCO ?? 1);
+  _setVal("rt_wait",        g.WAIT_MINUTI ?? 1);
+  _setChk("rt_rif_on",      g.RIFORNIMENTO_ABILITATO ?? true);
+  _setVal("rt_soglia",      g.RIFORNIMENTO_SOGLIA_M ?? 5.0);
+  _setVal("rt_soglia_pet",  g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
+  const ratio = g.ALLOCATION_RATIO || {};
+  _setVal("rt_r_campo", Math.round((ratio.campo    ?? 0.375)  * 100));
+  _setVal("rt_r_seg",   Math.round((ratio.segheria ?? 0.375)  * 100));
+  _setVal("rt_r_pet",   Math.round((ratio.petrolio ?? 0.1875) * 100));
+  _setVal("rt_r_acc",   Math.round((ratio.acciaio  ?? 0.0625) * 100));
+  rtAggiornaSomma();
+}
+
+function rtCaricaIstanze() {
+  if (!_rtData) return;
+  const emu   = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
+  const lista = emu === "bs" ? (_rtData.istanze_bs || []) : (_rtData.istanze_mumu || []);
+  const tbody = document.getElementById("rt_ist_tbody");
+  tbody.innerHTML = "";
+  lista.forEach((ist, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="checkbox" data-idx="${idx}" data-field="abilitata" ${ist.abilitata!==false?"checked":""}></td>
+      <td style="color:var(--accent);font-weight:bold">${ist.nome}</td>
+      <td><input type="number" data-idx="${idx}" data-field="truppe"      value="${ist.truppe??12000}"  min="0" max="99999" step="1000"></td>
+      <td><input type="number" data-idx="${idx}" data-field="max_squadre" value="${ist.max_squadre??4}" min="1" max="5"     step="1"></td>
+      <td><select data-idx="${idx}" data-field="layout">
+        <option value="1" ${(ist.layout??1)==1?"selected":""}>1</option>
+        <option value="2" ${(ist.layout??1)==2?"selected":""}>2</option>
+      </select></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Aggiorna label totale ratio
+function rtAggiornaSomma() {
+  const tot = +(_val("rt_r_campo")||0) + +(_val("rt_r_seg")||0) +
+              +(_val("rt_r_pet")||0)   + +(_val("rt_r_acc")||0);
+  const el = document.getElementById("rt_ratio_sum");
+  el.textContent = `Totale: ${tot}% ${tot===100?"✓":"← deve essere 100%"}`;
+  el.style.color = tot === 100 ? "var(--green)" : "var(--yellow)";
+}
+["rt_r_campo","rt_r_seg","rt_r_pet","rt_r_acc"].forEach(id => {
+  document.getElementById(id)?.addEventListener("input", rtAggiornaSomma);
+});
+
+// Salva parametri globali
+async function rtSalvaGlobali() {
+  if (!_rtData) return;
+  const btn = document.getElementById("rt_save_globali");
+  const msg = document.getElementById("rt_msg_globali");
+  btn.disabled = true;
+
+  const campo = +_val("rt_r_campo") / 100;
+  const seg   = +_val("rt_r_seg")   / 100;
+  const pet   = +_val("rt_r_pet")   / 100;
+  const acc   = +_val("rt_r_acc")   / 100;
+  const tot   = campo + seg + pet + acc;
+  if (Math.abs(tot - 1.0) > 0.01) {
+    _rtMsg("rt_msg_globali", "⚠ Allocation ratio deve sommare a 100%", false);
+    btn.disabled = false; return;
+  }
+
+  _rtData.globali = {
+    ..._rtData.globali,
+    ISTANZE_BLOCCO:               +_val("rt_blocco"),
+    WAIT_MINUTI:                  +_val("rt_wait"),
+    RIFORNIMENTO_ABILITATO:       document.getElementById("rt_rif_on").checked,
+    RIFORNIMENTO_SOGLIA_M:        +_val("rt_soglia"),
+    RIFORNIMENTO_SOGLIA_PETROLIO_M: +_val("rt_soglia_pet"),
+    ALLOCATION_RATIO: { campo, segheria: seg, petrolio: pet, acciaio: acc },
+  };
+
+  const ok = await _rtPost(_rtData);
+  _rtMsg("rt_msg_globali", ok ? "✓ Salvato — operativo dal prossimo ciclo" : "✗ Errore salvataggio", ok);
+  btn.disabled = false;
+}
+
+// Salva istanze
+async function rtSalvaIstanze() {
+  if (!_rtData) return;
+  const btn  = document.getElementById("rt_save_ist");
+  const emu  = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
+  const key  = emu === "bs" ? "istanze_bs" : "istanze_mumu";
+  const lista = _rtData[key] || [];
+  btn.disabled = true;
+
+  // Leggi valori dalla tabella
+  document.querySelectorAll("#rt_ist_tbody tr").forEach((tr, idx) => {
+    if (idx >= lista.length) return;
+    tr.querySelectorAll("[data-field]").forEach(el => {
+      const field = el.dataset.field;
+      if (el.type === "checkbox") lista[idx][field] = el.checked;
+      else if (el.tagName === "SELECT") lista[idx][field] = +el.value;
+      else lista[idx][field] = el.type === "number" ? +el.value : el.value;
+    });
+  });
+  _rtData[key] = lista;
+
+  const ok = await _rtPost(_rtData);
+  _rtMsg("rt_msg_ist", ok ? "✓ Salvato — operativo dal prossimo ciclo" : "✗ Errore salvataggio", ok);
+  btn.disabled = false;
+}
+
+// POST runtime.json al server
+async function _rtPost(dati) {
+  try {
+    const res = await fetch("runtime.json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dati)
+    });
+    return res.ok;
+  } catch(e) { return false; }
+}
+
+function _val(id)       { return document.getElementById(id)?.value ?? ""; }
+function _setVal(id, v) { const el = document.getElementById(id); if(el) el.value = v; }
+function _setChk(id, v) { const el = document.getElementById(id); if(el) el.checked = !!v; }
+function _rtMsg(id, txt, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = txt;
+  el.className = "rt-msg " + (ok ? "ok" : "err");
+  setTimeout(() => { el.textContent = ""; el.className = "rt-msg"; }, 4000);
+}
+
+// Carica runtime al primo avvio e poi ogni 10s (per riflettere modifiche esterne)
+rtCarica();
+setInterval(rtCarica, 10000);
+</script>
+</body>
+</html>

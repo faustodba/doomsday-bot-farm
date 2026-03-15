@@ -1,0 +1,78 @@
+=======================================================
+  DOOMSDAY BOT V5 - 2026-03-15 21:53:46
+=======================================================
+[21:53:46] [MAIN] === CICLO 1 === (21:53:46)
+[21:53:46] [MAIN] Pool: 10 istanze, max 1 parallele
+[21:53:51] [FAU_00] Slot acquisito - avvio istanza
+[21:53:51] [BS] Avvio blocco: ['FAU_00']
+[21:53:51] [FAU_00] Avvio BlueStacks --instance Pie64_13...
+[21:53:51] [FAU_00] BlueStacks avviato (PID=24804)
+[21:53:51] [BS] Attesa connessione ADB (polling ogni 5s)...
+[21:53:51] [BS] [POLL #1] Tempo rimasto: 119s | Connesse: [] | In attesa: ['FAU_00']
+[21:53:51] [FAU_00] [POLL #1] Tentativo connect 127.0.0.1:5685...
+[21:53:53] [FAU_00] [POLL #1] connect → 'unable to connect to 127.0.0.1:5685: cannot connect to 127.0.0.1:5685: Impossibile stabilire la connessione. Rifiuto persistente del computer di destinazione. (10061)' (2.0s)
+[21:53:53] [FAU_00] [POLL #1] echo ok → '' (0.1s)
+[21:53:53] [FAU_00] [POLL #1] echo fallito - riprovo al prossimo poll
+[21:53:58] [BS] [POLL #2] Tempo rimasto: 112s | Connesse: [] | In attesa: ['FAU_00']
+[21:53:58] [FAU_00] [POLL #2] Tentativo connect 127.0.0.1:5685...
+[21:53:58] [FAU_00] [POLL #2] connect → 'connected to 127.0.0.1:5685' (0.1s)
+[21:53:58] [FAU_00] [POLL #2] echo ok → '' (0.1s)
+[21:53:58] [FAU_00] [POLL #2] echo fallito - riprovo al prossimo poll
+[21:54:03] [BS] [POLL #3] Tempo rimasto: 107s | Connesse: [] | In attesa: ['FAU_00']
+[21:54:03] [FAU_00] [POLL #3] Tentativo connect 127.0.0.1:5685...
+[21:54:03] [FAU_00] [POLL #3] connect → 'already connected to 127.0.0.1:5685' (0.1s)
+[21:54:03] [FAU_00] [POLL #3] echo ok → '' (0.1s)
+[21:54:03] [FAU_00] [POLL #3] echo fallito - riprovo al prossimo poll
+[21:54:08] [BS] [POLL #4] Tempo rimasto: 102s | Connesse: [] | In attesa: ['FAU_00']
+[21:54:08] [FAU_00] [POLL #4] Tentativo connect 127.0.0.1:5685...
+[21:54:09] [FAU_00] [POLL #4] connect → 'already connected to 127.0.0.1:5685' (0.1s)
+[21:54:09] [FAU_00] [POLL #4] echo ok → 'ok' (0.2s)
+[21:54:09] [FAU_00] ADB connesso
+[21:55:15] [FAU_00] Errore avvio gioco
+[21:55:15] [BS] Pronte per caricamento: ['FAU_00']
+[21:55:15] [BS] [FAU_00] Attesa iniziale 45s caricamento...
+[21:56:00] [FAU_00] [TIMING] Attesa minima: 30s | Stima storica: 138s → polling dal secondo 30
+[21:56:30] [FAU_00] Screenshot fallito (1/10)
+[21:56:33] [FAU_00] Screenshot fallito (2/10)
+[21:56:36] [FAU_00] Screenshot fallito (3/10)
+[21:56:39] [FAU_00] Screenshot fallito (4/10)
+[21:56:41] [FAU_00] Screenshot fallito (5/10)
+[21:56:44] [FAU_00] Screenshot fallito (6/10)
+[21:56:47] [FAU_00] Screenshot fallito (7/10)
+[21:56:49] [FAU_00] Screenshot fallito (8/10)
+[21:56:52] [FAU_00] Screenshot fallito (9/10)
+[21:56:55] [FAU_00] Screenshot fallito (10/10)
+[21:56:55] [FAU_00] Watchdog: troppi screenshot falliti → gioco non risponde
+[21:56:55] [FAU_00] Tentativo riavvio gioco...
+[21:57:11] [FAU_00] Riavvio gioco fallito - abbandono istanza
+[21:57:11] [FAU_00] Gioco fermato
+[21:57:12] [FAU_00] HD-Player chiuso (PID=24804)
+[21:57:14] [FAU_00] Slot rilasciato
+[21:57:14] [FAU_01] Slot acquisito - avvio istanza
+[21:57:14] [BS] Avvio blocco: ['FAU_01']
+[21:57:14] [FAU_01] Avvio BlueStacks --instance Pie64_6...
+[21:57:14] [FAU_01] BlueStacks avviato (PID=3416)
+[21:57:14] [BS] Attesa connessione ADB (polling ogni 5s)...
+[21:57:14] [BS] [POLL #1] Tempo rimasto: 119s | Connesse: [] | In attesa: ['FAU_01']
+[21:57:14] [FAU_01] [POLL #1] Tentativo connect 127.0.0.1:5615...
+[21:57:16] [FAU_01] [POLL #1] connect → 'unable to connect to 127.0.0.1:5615: cannot connect to 127.0.0.1:5615: Impossibile stabilire la connessione. Rifiuto persistente del computer di destinazione. (10061)' (2.0s)
+[21:57:16] [FAU_01] [POLL #1] echo ok → '' (0.1s)
+[21:57:16] [FAU_01] [POLL #1] echo fallito - riprovo al prossimo poll
+[21:57:21] [BS] [POLL #2] Tempo rimasto: 112s | Connesse: [] | In attesa: ['FAU_01']
+[21:57:21] [FAU_01] [POLL #2] Tentativo connect 127.0.0.1:5615...
+[21:57:21] [FAU_01] [POLL #2] connect → 'connected to 127.0.0.1:5615' (0.0s)
+[21:57:21] [FAU_01] [POLL #2] echo ok → '' (0.0s)
+[21:57:21] [FAU_01] [POLL #2] echo fallito - riprovo al prossimo poll
+[21:57:26] [BS] [POLL #3] Tempo rimasto: 107s | Connesse: [] | In attesa: ['FAU_01']
+[21:57:26] [FAU_01] [POLL #3] Tentativo connect 127.0.0.1:5615...
+[21:57:26] [FAU_01] [POLL #3] connect → 'already connected to 127.0.0.1:5615' (0.0s)
+[21:57:26] [FAU_01] [POLL #3] echo ok → '' (0.0s)
+[21:57:26] [FAU_01] [POLL #3] echo fallito - riprovo al prossimo poll
+[21:57:31] [BS] [POLL #4] Tempo rimasto: 102s | Connesse: [] | In attesa: ['FAU_01']
+[21:57:31] [FAU_01] [POLL #4] Tentativo connect 127.0.0.1:5615...
+[21:57:31] [FAU_01] [POLL #4] connect → 'already connected to 127.0.0.1:5615' (0.0s)
+[21:57:31] [FAU_01] [POLL #4] echo ok → 'ok' (0.1s)
+[21:57:31] [FAU_01] ADB connesso
+[21:57:49] [FAU_01] Gioco avviato
+[21:57:49] [BS] Pronte per caricamento: ['FAU_01']
+[21:57:49] [BS] [FAU_01] Attesa iniziale 45s caricamento...

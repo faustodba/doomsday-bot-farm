@@ -1,0 +1,39 @@
+# Ignora tutto per default
+*
+
+# ── File Python ──────────────────────────────────────────
+!*.py
+
+# ── File progetto espliciti ──────────────────────────────
+!.gitignore
+!CONTEXT.md
+!README.md
+!LICENSE
+
+# ── Template immagini ────────────────────────────────────
+!*.png
+
+# ── Dashboard web ────────────────────────────────────────
+!*.html
+
+# ── Cartella tests ───────────────────────────────────────
+!tests/
+!tests/**
+
+# ── Cartella templates ───────────────────────────────────
+!templates/
+!templates/**
+
+# ── Cartella archive (esclusa — solo storico locale) ─────
+archive/
+
+# ── File di stato runtime (generati — non versionare) ────
+status.json
+timing.json
+runtime.json
+bot.log
+rifornimento_stato_*.json
+schedule_stato_*.json
+
+# ── Cartella debug (screenshot diagnostici) ───────────────
+debug/

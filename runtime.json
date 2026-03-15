@@ -1,0 +1,146 @@
+{
+  "_nota": "Modificabile a runtime — riletto ogni ciclo senza riavviare il bot",
+  "globali": {
+    "ISTANZE_BLOCCO": 1,
+    "WAIT_MINUTI": 1,
+    "RIFORNIMENTO_ABILITATO": true,
+    "RIFORNIMENTO_SOGLIA_M": 5,
+    "RIFORNIMENTO_SOGLIA_PETROLIO_M": 2.5,
+    "ALLOCATION_RATIO": {
+      "campo": 0.38,
+      "segheria": 0.38,
+      "petrolio": 0.18,
+      "acciaio": 0.06
+    }
+  },
+  "istanze_bs": [
+    {
+      "nome": "FAU_00",
+      "interno": "Pie64_13",
+      "porta": "5685",
+      "abilitata": true,
+      "truppe": 0,
+      "max_squadre": 5,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_01",
+      "interno": "Pie64_6",
+      "porta": "5615",
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_02",
+      "interno": "Pie64",
+      "porta": "5555",
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_03",
+      "interno": "Pie64_7",
+      "porta": "5625",
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_04",
+      "interno": "Pie64_8",
+      "porta": "5635",
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_05",
+      "interno": "Pie64_9",
+      "porta": "5645",
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_06",
+      "interno": "Pie64_11",
+      "porta": "5665",
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_07",
+      "interno": "Pie64_10",
+      "porta": "5655",
+      "abilitata": true,
+      "truppe": 13000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_08",
+      "interno": "Pie64_12",
+      "porta": "5675",
+      "abilitata": true,
+      "truppe": 13000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_09",
+      "interno": "Pie64_14",
+      "porta": "5695",
+      "abilitata": true,
+      "truppe": 13000,
+      "max_squadre": 4,
+      "layout": 1
+    }
+  ],
+  "istanze_mumu": [
+    {
+      "nome": "FAU_02",
+      "indice": "0",
+      "porta": 16384,
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_07",
+      "indice": "1",
+      "porta": 16416,
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_03",
+      "indice": "2",
+      "porta": 16448,
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    },
+    {
+      "nome": "FAU_04",
+      "indice": "3",
+      "porta": 16480,
+      "abilitata": true,
+      "truppe": 12000,
+      "max_squadre": 4,
+      "layout": 1
+    }
+  ]
+}
