@@ -52,12 +52,15 @@ def _default() -> dict:
         "_nota": (
             "Modificabile a runtime — riletto ogni ciclo. "
             "Le istanze vengono sempre lette da config.py. "
-            "Usa 'overrides' per modificare singole istanze "
-            "(es. {\"FAU_09\": {\"abilitata\": false, \"max_squadre\": 2}})."
+            "Usa 'overrides.bs' o 'overrides.mumu' per modificare singole istanze "
+            "(es. {\"bs\": {\"FAU_09\": {\"abilitata\": false}}, "
+            "\"mumu\": {\"FAU_01\": {\"truppe\": 13000}}})."
         ),
         "globali": {
             "ISTANZE_BLOCCO":                 getattr(config, "ISTANZE_BLOCCO", 1),
             "WAIT_MINUTI":                    getattr(config, "WAIT_MINUTI", 1),
+            "ALLEANZA_ABILITATA":             getattr(config, "ALLEANZA_ABILITATA", True),
+            "MESSAGGI_ABILITATI":             getattr(config, "MESSAGGI_ABILITATI", True),
             "RIFORNIMENTO_ABILITATO":         getattr(config, "RIFORNIMENTO_ABILITATO", True),
             "RIFORNIMENTO_SOGLIA_M":          getattr(config, "RIFORNIMENTO_SOGLIA_M", 5.0),
             "RIFORNIMENTO_SOGLIA_PETROLIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5),
@@ -68,7 +71,10 @@ def _default() -> dict:
                 "acciaio":  0.0625,
             },
         },
-        "overrides": {},
+        "overrides": {
+            "bs":   {},
+            "mumu": {},
+        },
     }
 
 
@@ -96,9 +102,9 @@ def inizializza_se_mancante():
             _scrivi_raw(_default())
             return
 
-        # --- Migrazione struttura vecchia ---
+        # --- Migrazione struttura vecchia (istanze_bs/istanze_mumu) ---
         if "istanze_bs" in esistente or "istanze_mumu" in esistente:
-            print("[RUNTIME] Struttura vecchia rilevata — migrazione a formato overrides...")
+            print("[RUNTIME] Struttura vecchia rilevata — migrazione a formato overrides namespace...")
             nuovo = _default()
 
             # Conserva i globali esistenti
@@ -106,55 +112,69 @@ def inizializza_se_mancante():
                 if k in nuovo["globali"]:
                     nuovo["globali"][k] = v
 
-            # Estrai overrides: solo delta rispetto ai default di config.py
-            overrides = {}
-            nomi_processati = set()
-            for chiave_lista in ("istanze_bs", "istanze_mumu"):
+            # Estrai overrides per namespace
+            for ns, chiave_lista in (("bs", "istanze_bs"), ("mumu", "istanze_mumu")):
                 for ist in esistente.get(chiave_lista, []):
                     nome = ist.get("nome", "")
-                    if not nome or nome in nomi_processati:
+                    if not nome:
                         continue
-                    nomi_processati.add(nome)
                     delta = {}
                     if not ist.get("abilitata", True):
                         delta["abilitata"] = False
                     ist_cfg = _trova_in_config(nome)
                     if ist_cfg:
-                        cfg_truppe      = ist_cfg[3] if len(ist_cfg) > 3 else 12000
-                        cfg_max_squadre = ist_cfg[4] if len(ist_cfg) > 4 else 4
-                        if ist.get("truppe") not in (None, cfg_truppe):
+                        if ist.get("truppe") not in (None, ist_cfg.get("truppe", 12000)):
                             delta["truppe"] = ist["truppe"]
-                        if ist.get("max_squadre") not in (None, cfg_max_squadre):
+                        if ist.get("max_squadre") not in (None, ist_cfg.get("max_squadre", 4)):
                             delta["max_squadre"] = ist["max_squadre"]
                     if delta:
-                        overrides[nome] = delta
+                        nuovo["overrides"][ns][nome] = delta
 
-            nuovo["overrides"] = overrides
             _scrivi_raw(nuovo)
-            nomi = list(overrides.keys())
-            print(f"[RUNTIME] Migrazione completata. Overrides: {nomi if nomi else 'nessuno'}")
+            print(f"[RUNTIME] Migrazione completata.")
             return
 
-        # --- Struttura nuova: aggiungi chiavi globali mancanti ---
+        # --- Migrazione overrides flat → namespace bs/mumu ---
+        ovr = esistente.get("overrides", {})
+        if ovr and not ("bs" in ovr or "mumu" in ovr):
+            print("[RUNTIME] Overrides flat rilevati — migrazione a namespace bs/mumu...")
+            nuovo = _default()
+            for k, v in esistente.get("globali", {}).items():
+                if k in nuovo["globali"]:
+                    nuovo["globali"][k] = v
+            # Applica gli override flat a entrambi i namespace (comportamento conservativo)
+            for nome, delta in ovr.items():
+                nuovo["overrides"]["bs"][nome]   = dict(delta)
+                nuovo["overrides"]["mumu"][nome] = dict(delta)
+            _scrivi_raw(nuovo)
+            print("[RUNTIME] Migrazione overrides flat completata — verificare bs/mumu in runtime.json")
+            return
+
+        # --- Struttura nuova: aggiungi chiavi globali mancanti e namespace overrides ---
         default = _default()
         aggiornato = False
         for k, v in default["globali"].items():
             if k not in esistente.get("globali", {}):
                 esistente.setdefault("globali", {})[k] = v
                 aggiornato = True
-        if "overrides" not in esistente:
-            esistente["overrides"] = {}
+        # Assicura che overrides abbia entrambi i namespace
+        ovr = esistente.setdefault("overrides", {})
+        if "bs" not in ovr:
+            ovr["bs"] = {}
+            aggiornato = True
+        if "mumu" not in ovr:
+            ovr["mumu"] = {}
             aggiornato = True
         if aggiornato:
             _scrivi_raw(esistente)
             print("[RUNTIME] runtime.json aggiornato con nuove chiavi")
 
 
-def _trova_in_config(nome: str) -> list:
+def _trova_in_config(nome: str) -> dict:
     """Cerca istanza per nome in config.ISTANZE e config.ISTANZE_MUMU."""
     for lst in (getattr(config, "ISTANZE", []), getattr(config, "ISTANZE_MUMU", [])):
         for ist in lst:
-            if ist[0] == nome:
+            if ist.get("nome") == nome:
                 return ist
     return None
 
@@ -187,6 +207,10 @@ def applica(rt: dict):
         config.ISTANZE_BLOCCO = int(g["ISTANZE_BLOCCO"])
     if "WAIT_MINUTI" in g:
         config.WAIT_MINUTI = int(g["WAIT_MINUTI"])
+    if "ALLEANZA_ABILITATA" in g:
+        config.ALLEANZA_ABILITATA = bool(g["ALLEANZA_ABILITATA"])
+    if "MESSAGGI_ABILITATI" in g:
+        config.MESSAGGI_ABILITATI = bool(g["MESSAGGI_ABILITATI"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
     if "RIFORNIMENTO_SOGLIA_M" in g:
@@ -211,43 +235,53 @@ def applica(rt: dict):
 def istanze_attive(rt: dict, emulatore: str) -> list:
     """
     Legge le istanze FRESH da config.py (mai dal json),
-    applica gli overrides e ritorna la lista filtrata.
+    applica gli overrides del namespace corretto e ritorna la lista filtrata.
 
-    Formato elemento: [nome, interno/indice, porta, truppe, max_squadre, layout]
-    emulatore: "BlueStacks" | "MuMuPlayer 12"
+    Namespace overrides: "bs" per BlueStacks, "mumu" per MuMuPlayer.
+    Priorità abilitata: runtime.json override > config.py campo abilitata.
     """
     if "BlueStacks" in emulatore:
         lista_config = getattr(config, "ISTANZE", [])
+        ns = "bs"
     else:
         lista_config = getattr(config, "ISTANZE_MUMU", [])
+        ns = "mumu"
 
-    overrides = rt.get("overrides", {})
+    # Supporta sia struttura nuova {"bs": {...}, "mumu": {...}}
+    # che struttura flat legacy {"FAU_00": {...}} — retrocompatibilità
+    ovr_root = rt.get("overrides", {})
+    if ns in ovr_root:
+        overrides = ovr_root[ns]
+    elif "bs" not in ovr_root and "mumu" not in ovr_root:
+        overrides = ovr_root  # struttura flat legacy
+    else:
+        overrides = {}
+
     risultato = []
 
     for ist in lista_config:
-        nome = ist[0]
+        nome = ist.get("nome", "")
         ovr  = overrides.get(nome, {})
 
-        # Istanza disabilitata via override
-        if not ovr.get("abilitata", True):
+        # abilitata: override runtime ha precedenza su config.py
+        abilitata = ovr.get("abilitata", ist.get("abilitata", True))
+        if not abilitata:
             continue
 
-        # Valori base da config.py
-        truppe      = ist[3] if len(ist) > 3 else config.TRUPPE_RACCOLTA
-        max_squadre = ist[4] if len(ist) > 4 else 4
-        layout      = ist[5] if len(ist) > 5 else 1
-        lingua      = ist[6] if len(ist) > 6 else "it"
+        # Costruisci dizionario risultante applicando overrides numerici
+        ist_out = dict(ist)
+        if "truppe"      in ovr: ist_out["truppe"]      = int(ovr["truppe"])
+        if "max_squadre" in ovr: ist_out["max_squadre"] = int(ovr["max_squadre"])
+        if "layout"      in ovr: ist_out["layout"]      = int(ovr["layout"])
+        if "lingua"      in ovr: ist_out["lingua"]      = str(ovr["lingua"])
 
-        # Applica overrides numerici
-        if "truppe"      in ovr: truppe      = int(ovr["truppe"])
-        if "max_squadre" in ovr: max_squadre = int(ovr["max_squadre"])
-        if "layout"      in ovr: layout      = int(ovr["layout"])
-        if "lingua"      in ovr: lingua      = str(ovr["lingua"])
-
+        # Normalizza porta per tipo emulatore
         if "BlueStacks" in emulatore:
-            risultato.append([nome, str(ist[1]), str(ist[2]), truppe, max_squadre, layout, lingua])
+            ist_out["porta"] = str(ist_out["porta"])
         else:
-            risultato.append([nome, str(ist[1]), int(ist[2]), truppe, max_squadre, layout, lingua])
+            ist_out["porta"] = int(ist_out["porta"])
+
+        risultato.append(ist_out)
 
     return risultato
 
@@ -274,3 +308,27 @@ def _scrivi_raw(dati: dict) -> bool:
 
 def leggi_globali() -> dict:
     return carica().get("globali", {})
+
+
+# ==============================================================================
+# Ripristina runtime.json dai valori correnti di config.py
+# Conserva gli overrides per-istanza (non li azzera).
+# ==============================================================================
+def ripristina_da_config() -> bool:
+    """
+    Sovrascrive la sezione 'globali' di runtime.json con i valori
+    attuali di config.py, mantenendo invariati gli overrides per-istanza.
+    """
+    esistente = carica()
+    nuovo = _default()
+    # Conserva overrides esistenti (con namespace se presenti)
+    ovr_esistente = esistente.get("overrides", {})
+    if "bs" in ovr_esistente or "mumu" in ovr_esistente:
+        nuovo["overrides"] = ovr_esistente
+    else:
+        # Struttura flat legacy — conserva com'è
+        nuovo["overrides"] = ovr_esistente
+    ok = _scrivi_raw(nuovo)
+    if ok:
+        print("[RUNTIME] runtime.json ripristinato da config.py")
+    return ok

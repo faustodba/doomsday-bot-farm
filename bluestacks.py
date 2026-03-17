@@ -157,8 +157,10 @@ _pids_lock = threading.Lock()
 # ------------------------------------------------------------------------------
 # Avvia una singola istanza BlueStacks
 # ------------------------------------------------------------------------------
-def avvia_istanza(ist: list, logger=None) -> bool:
-    nome, interno, porta = ist[0], ist[1], ist[2]
+def avvia_istanza(ist: dict, logger=None) -> bool:
+    nome    = ist["nome"]
+    interno = ist["interno"]
+    porta   = ist["porta"]
 
     def log(msg):
         if logger: logger(nome, msg)
@@ -193,7 +195,7 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
     def log(msg):
         if logger: logger("BS", msg)
 
-    log(f"Avvio blocco: {[i[0] for i in blocco_ist]}")
+    log(f"Avvio blocco: {[i['nome'] for i in blocco_ist]}")
 
     # FASE 1 - Avvio parallelo BS
     threads = [threading.Thread(target=avvia_istanza, args=(ist, logger))
@@ -211,10 +213,11 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
     while time.time() < scadenza:
         poll_n += 1
         rimasto = int(scadenza - time.time())
-        log(f"[POLL #{poll_n}] Tempo rimasto: {rimasto}s | Connesse: {list(connesse)} | In attesa: {[i[0] for i in blocco_ist if i[2] not in connesse]}")
+        log(f"[POLL #{poll_n}] Tempo rimasto: {rimasto}s | Connesse: {list(connesse)} | In attesa: {[i['nome'] for i in blocco_ist if i['porta'] not in connesse]}")
 
         for ist in blocco_ist:
-            nome, _, porta = ist[0], ist[1], ist[2]
+            nome  = ist["nome"]
+            porta = ist["porta"]
             if porta in connesse:
                 continue
             if logger: logger(nome, f"[POLL #{poll_n}] Tentativo connect 127.0.0.1:{porta}...")
@@ -243,13 +246,14 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
             break
         time.sleep(5)
 
-    mancanti = [i[0] for i in blocco_ist if i[2] not in connesse]
+    mancanti = [i["nome"] for i in blocco_ist if i["porta"] not in connesse]
     if mancanti:
         log(f"ADB non connesso su: {mancanti}")
         # Killa i processi BS che non hanno risposto via ADB
         for ist in blocco_ist:
-            if ist[2] not in connesse:
-                nome_ist, interno_ist = ist[0], ist[1]
+            if ist["porta"] not in connesse:
+                nome_ist    = ist["nome"]
+                interno_ist = ist["interno"]
                 with _pids_lock:
                     pid_appeso = _pids_istanze.get(interno_ist, 0)
                 if pid_appeso:
@@ -262,7 +266,7 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
                     except Exception as e:
                         if logger: logger(nome_ist, f"Errore kill PID={pid_appeso}: {e}")
 
-    log(f"Pronte per caricamento: {[i[0] for i in avviate]}")
+    log(f"Pronte per caricamento: {[i['nome'] for i in avviate]}")
     return avviate
 
 # ------------------------------------------------------------------------------
@@ -283,8 +287,10 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
 # in modo da NON toccare le altre istanze attive in parallelo.
 # Metodo identico alla V2 AHK: WinGetPID(nome) → taskkill /F /PID
 # ------------------------------------------------------------------------------
-def chiudi_istanza(ist: list, logger=None):
-    nome, interno, porta = ist[0], ist[1], ist[2]
+def chiudi_istanza(ist: dict, logger=None):
+    nome    = ist["nome"]
+    interno = ist["interno"]
+    porta   = ist["porta"]
 
     def log(msg):
         if logger: logger(nome, msg)
@@ -351,7 +357,7 @@ def chiudi_blocco(blocco_ist: list, logger=None):
     def log(msg):
         if logger: logger("BS", msg)
 
-    log(f"Chiusura blocco: {[i[0] for i in blocco_ist]}")
+    log(f"Chiusura blocco: {[i['nome'] for i in blocco_ist]}")
     for ist in blocco_ist:
         chiudi_istanza(ist, logger)
 

@@ -66,7 +66,7 @@ def _scegli_emulatore():
     # Filtro istanze se passato da launcher (--istanze FAU_00,FAU_01,...)
     if args.istanze:
         nomi_sel = set(args.istanze.split(","))
-        istanze = [i for i in istanze_base if i[0] in nomi_sel]
+        istanze = [i for i in istanze_base if i.get("nome") in nomi_sel]
         if not istanze:
             print(f"  ATTENZIONE: nessuna istanza trovata per: {args.istanze}")
             istanze = istanze_base
@@ -82,6 +82,69 @@ emulatore.assicura_avvio_manager(logger=log.logger)
 
 # Inizializza runtime.json da config.py se non esiste ancora
 runtime.inizializza_se_mancante()
+
+# ------------------------------------------------------------------------------
+# Scelta configurazione di partenza
+# Se runtime.json esiste già, chiede se usarlo o ripartire da config.py.
+# Bypassa la domanda se --config è passato da launcher.
+# ------------------------------------------------------------------------------
+def _scegli_configurazione():
+    import argparse, os
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--config", default=None, choices=["runtime", "default"],
+                        help="runtime=usa runtime.json, default=ripristina da config.py")
+    args, _ = parser.parse_known_args()
+
+    path_rt = os.path.join(config.BOT_DIR, "runtime.json")
+    if not os.path.exists(path_rt):
+        return  # nessun file → niente da chiedere, _default() già applicato
+
+    if args.config == "runtime":
+        scelta = "1"
+    elif args.config == "default":
+        scelta = "2"
+    else:
+        # Mostra riepilogo valori attuali in runtime.json
+        rt_corrente = runtime.carica()
+        g = rt_corrente.get("globali", {})
+        print("\n" + "=" * 55)
+        print("  Configurazione runtime.json attuale:")
+        print(f"    Istanze parallele : {g.get('ISTANZE_BLOCCO', '?')}")
+        print(f"    Attesa cicli      : {g.get('WAIT_MINUTI', '?')} min")
+        print(f"    Alleanza          : {'ON' if g.get('ALLEANZA_ABILITATA', True) else 'OFF'}")
+        print(f"    Messaggi          : {'ON' if g.get('MESSAGGI_ABILITATI', True) else 'OFF'}")
+        print(f"    Rifornimento      : {'ON' if g.get('RIFORNIMENTO_ABILITATO', True) else 'OFF'}")
+        ovr = rt_corrente.get("overrides", {})
+        if ovr:
+            print(f"    Overrides istanze : {list(ovr.keys())}")
+        print("=" * 55)
+        print("  Usa questa configurazione o ripristina config.py?")
+        print("    [1] Usa runtime.json  (default)")
+        print("    [2] Ripristina da config.py (sovrascrive runtime.json)")
+        print("=" * 55)
+        scelta = input("  Scelta [1/2]: ").strip()
+
+    if scelta == "2":
+        runtime.ripristina_da_config()
+        print("  [RUNTIME] Configurazione ripristinata da config.py")
+    else:
+        print("  [RUNTIME] Uso configurazione da runtime.json")
+
+_scegli_configurazione()
+
+# ------------------------------------------------------------------------------
+# Pulizia istanze appese all'avvio
+# Killa tutti i processi emulatore rimasti da sessioni precedenti.
+# Usa set() vuoto → cleanup aggressivo: killa tutto quello che trova.
+# ------------------------------------------------------------------------------
+def _pulizia_avvio():
+    print("\n" + "=" * 55)
+    print("  Pulizia istanze appese da sessioni precedenti...")
+    emulatore.cleanup_istanze_appese(set(), logger=log.logger)
+    print("=" * 55)
+
+_pulizia_avvio()
+
 # Fallback: se runtime.json non ha istanze abilitate, usa quelle originali di config.py
 _istanze_originali = list(ISTANZE_ATTIVE)
 
@@ -127,10 +190,10 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
     _pids_snapshot_lock = threading.Lock()
 
     def fn_raccolta(ist):
-        nome   = ist[0]
-        porta  = ist[2]
-        truppe = ist[3] if len(ist) > 3 else None
-        max_sq = ist[4] if len(ist) > 4 else 0
+        nome   = ist["nome"]
+        porta  = ist["porta"]
+        truppe = ist.get("truppe")
+        max_sq = ist.get("max_squadre", 0)
         return raccolta.raccolta_istanza(porta, nome, truppe, max_sq, log.logger,
                                          ciclo=_ciclo_corrente,
                                          blacklist=_blacklist_nodi,
@@ -138,8 +201,8 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
                                          ist=ist)
 
     def worker(ist):
-        nome    = ist[0]
-        interno = ist[1]
+        nome    = ist["nome"]
+        interno = ist.get("interno") or ist.get("indice", "")
 
         # Acquisisce slot: se ISTANZE_BLOCCO già attive, aspetta qui
         semaforo.acquire()
@@ -158,9 +221,7 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
                 pid = emulatore._pids_istanze.get(interno, 0)
             if pid:
                 with _pids_snapshot_lock:
-                    _pids_snapshot.add(pid)
-
-            # Attesa iniziale caricamento (per-istanza, non blocca le altre)
+                    _pids_snapshot.add(pid)            # Attesa iniziale caricamento (per-istanza, non blocca le altre)
             log.logger(NOME_EMULATORE, f"[{nome}] Attesa iniziale {config.DELAY_CARICA_INIZ}s caricamento...")
             time.sleep(config.DELAY_CARICA_INIZ)
 
@@ -178,7 +239,7 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
 
     # Lancia un thread per ogni istanza; il semaforo controlla quante partono
     for ist in istanze:
-        t = threading.Thread(target=worker, args=(ist,), name=ist[0])
+        t = threading.Thread(target=worker, args=(ist,), name=ist["nome"])
         t.start()
         threads.append(t)
         # Piccola pausa tra i lanci per non sovraccaricare il semaforo in burst
@@ -232,14 +293,14 @@ def main():
             ISTANZE_ATTIVE = _istanze_originali
 
         debug.init_ciclo(ciclo)
-        log.init_ciclo(debug.ciclo_dir(), [i[0] for i in ISTANZE_ATTIVE])
+        log.init_ciclo(debug.ciclo_dir(), [i["nome"] for i in ISTANZE_ATTIVE])
         log.logger("MAIN", f"=== CICLO {ciclo} === ({datetime.now().strftime('%H:%M:%S')})")
         log.logger("MAIN", f"Pool: {len(ISTANZE_ATTIVE)} istanze, max {config.ISTANZE_BLOCCO} parallele")
         if ciclo > 1:
             timing.riepilogo(log.logger)
 
         # Inizializza status per il ciclo corrente
-        status.init_ciclo(ciclo, [i[0] for i in ISTANZE_ATTIVE])
+        status.init_ciclo(ciclo, [i["nome"] for i in ISTANZE_ATTIVE])
 
         t_inizio = time.time()
         totale_inviate, totale_errori, totale_timeout, totale_watchdog, risultati = esegui_ciclo_pool(ISTANZE_ATTIVE, ciclo)

@@ -6,8 +6,18 @@
 import subprocess
 import os
 import time
+import threading
 from PIL import Image
 import config
+
+# ------------------------------------------------------------------------------
+# Lock screencap — serializza solo l'operazione screenshot tra thread paralleli.
+# Evita frame corrotti quando due istanze fanno screencap simultaneamente.
+# Timeout di sicurezza: se un thread non rilascia entro 30s (crash), il lock
+# viene forzatamente sbloccato per non paralizzare le altre istanze.
+# ------------------------------------------------------------------------------
+_screencap_lock    = threading.Lock()
+_SCREENCAP_TIMEOUT = 30  # secondi massimi di attesa per acquisire il lock
 
 # ------------------------------------------------------------------------------
 # Esegui comando ADB generico
@@ -88,18 +98,34 @@ def keyevent(porta: str, keycode: str):
 # Screenshot via ADB -> salva in BOT_DIR e restituisce path
 # ------------------------------------------------------------------------------
 def screenshot(porta: str) -> str:
-    """Scatta screenshot dell'istanza e lo salva localmente. Ritorna il path."""
+    """
+    Scatta screenshot dell'istanza e lo salva localmente. Ritorna il path.
+    Serializzato con lock per evitare frame corrotti con istanze parallele.
+    Timeout di 30s per evitare deadlock in caso di crash di un thread.
+    """
     remote_path = f"/sdcard/ahk_screen_{porta}.png"
     local_path  = os.path.join(config.BOT_DIR, f"screen_{porta}.png")
 
-    adb_shell(porta, f"screencap -p {remote_path}")
-    result = subprocess.run(
-        [config.ADB_EXE, "-s", f"127.0.0.1:{porta}", "pull", remote_path, local_path],
-        capture_output=True, timeout=15
-    )
-    if result.returncode == 0 and os.path.exists(local_path):
-        return local_path
-    return ""
+    acquired = _screencap_lock.acquire(timeout=_SCREENCAP_TIMEOUT)
+    if not acquired:
+        # Timeout: il lock non è stato rilasciato entro 30s.
+        # Procedi comunque — meglio un frame potenzialmente corrotto
+        # che bloccare l'istanza indefinitamente.
+        print(f"[ADB] WARN screenshot({porta}): lock timeout {_SCREENCAP_TIMEOUT}s — procedo senza lock")
+        acquired = False
+
+    try:
+        adb_shell(porta, f"screencap -p {remote_path}")
+        result = subprocess.run(
+            [config.ADB_EXE, "-s", f"127.0.0.1:{porta}", "pull", remote_path, local_path],
+            capture_output=True, timeout=15
+        )
+        if result.returncode == 0 and os.path.exists(local_path):
+            return local_path
+        return ""
+    finally:
+        if acquired:
+            _screencap_lock.release()
 
 # ------------------------------------------------------------------------------
 # Leggi pixel da screenshot

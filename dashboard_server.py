@@ -75,24 +75,26 @@ def _run():
 
                 def _bs(ist):
                     return {
-                        "nome":        ist[0],
-                        "interno":     ist[1],
-                        "porta":       ist[2],
-                        "truppe":      ist[3] if len(ist) > 3 else 12000,
-                        "max_squadre": ist[4] if len(ist) > 4 else 4,
-                        "layout":      ist[5] if len(ist) > 5 else 1,
-                        "lingua":      ist[6] if len(ist) > 6 else "it",
+                        "nome":        ist.get("nome", ""),
+                        "interno":     ist.get("interno", ""),
+                        "porta":       ist.get("porta", ""),
+                        "truppe":      ist.get("truppe", 12000),
+                        "max_squadre": ist.get("max_squadre", 4),
+                        "layout":      ist.get("layout", 1),
+                        "lingua":      ist.get("lingua", "it"),
+                        "abilitata":   ist.get("abilitata", True),
                     }
 
                 def _mumu(ist):
                     return {
-                        "nome":        ist[0],
-                        "indice":      ist[1],
-                        "porta":       ist[2],
-                        "truppe":      ist[3] if len(ist) > 3 else 12000,
-                        "max_squadre": ist[4] if len(ist) > 4 else 4,
-                        "layout":      ist[5] if len(ist) > 5 else 1,
-                        "lingua":      ist[6] if len(ist) > 6 else "it",
+                        "nome":        ist.get("nome", ""),
+                        "indice":      ist.get("indice", ""),
+                        "porta":       ist.get("porta", 16384),
+                        "truppe":      ist.get("truppe", 12000),
+                        "max_squadre": ist.get("max_squadre", 4),
+                        "layout":      ist.get("layout", 1),
+                        "lingua":      ist.get("lingua", "en"),
+                        "abilitata":   ist.get("abilitata", True),
                     }
 
                 payload = {

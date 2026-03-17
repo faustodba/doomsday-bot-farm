@@ -118,9 +118,9 @@ def _mumu_player_attivo() -> bool:
 # ------------------------------------------------------------------------------
 # Avvia una singola istanza MuMuPlayer
 # ------------------------------------------------------------------------------
-def avvia_istanza(ist: list, logger=None) -> bool:
-    nome, interno, _ = ist[0], ist[1], ist[2]
-    indice = _indice_da_interno(interno)
+def avvia_istanza(ist: dict, logger=None) -> bool:
+    nome   = ist["nome"]
+    indice = _indice_da_interno(ist["indice"])
 
     def log(msg):
         if logger: logger(nome, msg)
@@ -141,7 +141,7 @@ def avvia_istanza(ist: list, logger=None) -> bool:
                 pid = info.get("pid", 0)
                 if pid:
                     with _pids_lock:
-                        _pids_istanze[interno] = pid
+                        _pids_istanze[ist["indice"]] = pid
                     log(f"Processo avviato (PID={pid})")
                     return True
         log("WARN: processo non rilevato entro 20s - continuo comunque")
@@ -163,7 +163,7 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
     def log(msg):
         if logger: logger("MUMU", msg)
 
-    log(f"Avvio blocco: {[i[0] for i in blocco_ist]}")
+    log(f"Avvio blocco: {[i['nome'] for i in blocco_ist]}")
 
     # FASE 1 - Avvio parallelo
     threads = [threading.Thread(target=avvia_istanza, args=(ist, logger))
@@ -181,8 +181,8 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
 
     while time.time() < scadenza:
         for ist in blocco_ist:
-            nome, interno = ist[0], ist[1]
-            indice = _indice_da_interno(interno)
+            nome   = ist["nome"]
+            indice = _indice_da_interno(ist["indice"])
             if indice in connesse:
                 continue
 
@@ -196,7 +196,7 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
             # Android pronto → tenta connessione ADB
             ok, porta_reale = _mumu_adb_connect(indice)
             if ok and porta_reale:
-                ist[2] = porta_reale
+                ist["porta"] = porta_reale
                 if logger: logger(nome, f"ADB connesso (porta={porta_reale})")
                 connesse.add(indice)
                 if adb.avvia_gioco(porta_reale):
@@ -209,13 +209,14 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
             break
         time.sleep(5)
 
-    mancanti = [i[0] for i in blocco_ist if _indice_da_interno(i[1]) not in connesse]
+    mancanti = [i["nome"] for i in blocco_ist if _indice_da_interno(i["indice"]) not in connesse]
     if mancanti:
         log(f"ADB non connesso su: {mancanti}")
         for ist in blocco_ist:
-            if _indice_da_interno(ist[1]) not in connesse:
-                nome_ist, interno_ist = ist[0], ist[1]
-                indice_ist = _indice_da_interno(interno_ist)
+            if _indice_da_interno(ist["indice"]) not in connesse:
+                nome_ist    = ist["nome"]
+                interno_ist = ist["indice"]
+                indice_ist  = _indice_da_interno(interno_ist)
                 if logger: logger(nome_ist, f"ADB fallito - shutdown istanza (index={indice_ist})")
                 try:
                     subprocess.run(
@@ -227,7 +228,7 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
                 except Exception as e:
                     if logger: logger(nome_ist, f"Errore shutdown MuMu: {e}")
 
-    log(f"Pronte per caricamento: {[i[0] for i in avviate]}")
+    log(f"Pronte per caricamento: {[i['nome'] for i in avviate]}")
     return avviate
 
 # ------------------------------------------------------------------------------
@@ -244,9 +245,10 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
 # ------------------------------------------------------------------------------
 # Chiudi una singola istanza MuMuPlayer
 # ------------------------------------------------------------------------------
-def chiudi_istanza(ist: list, logger=None):
-    nome, interno, porta = ist[0], ist[1], ist[2]
-    indice = _indice_da_interno(interno)
+def chiudi_istanza(ist: dict, logger=None):
+    nome   = ist["nome"]
+    indice = _indice_da_interno(ist["indice"])
+    porta  = ist["porta"]
 
     def log(msg):
         if logger: logger(nome, msg)
@@ -276,7 +278,7 @@ def chiudi_istanza(ist: list, logger=None):
         )
         log(f"MuMuPlayer shutdown (index={indice}) → {result.stdout.strip() or 'OK'}")
         with _pids_lock:
-            _pids_istanze.pop(interno, None)
+            _pids_istanze.pop(ist["indice"], None)
     except Exception as e:
         log(f"Errore chiusura MuMu (index={indice}): {e}")
 
@@ -285,7 +287,7 @@ def chiudi_istanza(ist: list, logger=None):
     if _istanza_attiva(indice):
         # Recupera PID aggiornato dal registro o da info
         with _pids_lock:
-            pid = _pids_istanze.get(interno, 0)
+            pid = _pids_istanze.get(ist["indice"], 0)
         if not pid:
             pid = _get_pid_istanza_mumu(indice)
         if pid:
@@ -310,7 +312,7 @@ def chiudi_blocco(blocco_ist: list, logger=None):
     def log(msg):
         if logger: logger("MUMU", msg)
 
-    log(f"Chiusura blocco: {[i[0] for i in blocco_ist]}")
+    log(f"Chiusura blocco: {[i['nome'] for i in blocco_ist]}")
     for ist in blocco_ist:
         chiudi_istanza(ist, logger)
 

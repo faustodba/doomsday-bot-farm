@@ -102,48 +102,51 @@ _verifica_percorsi()
 # ==============================================================================
 # 3. ISTANZE
 #
-# Struttura comune (6 campi):
-#   [nome, interno, porta_adb, truppe_raccolta, max_squadre, layout_barra]
+# Ogni istanza è un dizionario con i seguenti campi:
 #
-#   nome           : identificatore istanza (es. FAU_00)
-#   interno        : nome interno BS (es. "Pie64") OPPURE indice MuMu (es. "0")
-#   porta_adb      : porta TCP ADB (BS: fissa; MuMu: aggiornata a runtime)
-#   truppe_raccolta: truppe per squadra (0 = MAX, None = usa TRUPPE_RACCOLTA globale)
-#   max_squadre    : max raccoglitori da inviare (1-5, 0 = tutte le libere)
-#   layout_barra   : 1 = standard 5 icone | 2 = compatto 4 icone (no Bestia)
+#   CAMPI COMUNI:
+#     nome        : identificatore istanza (es. "FAU_00")
+#     porta       : porta TCP ADB
+#     truppe      : truppe per squadra (0 = MAX, None = usa TRUPPE_RACCOLTA globale)
+#     max_squadre : max raccoglitori da inviare (1-5, 0 = tutte le libere)
+#     layout      : 1 = barra standard 5 icone | 2 = compatto 4 icone (no Bestia)
+#     abilitata   : True = partecipa al ciclo | False = visibile in dashboard ma esclusa
+#
+#   SOLO BlueStacks:
+#     interno     : nome interno BS (es. "Pie64_12")
+#
+#   SOLO MuMuPlayer:
+#     indice      : indice MuMu (es. "8")
+#     lingua      : "it" = italiano | "en" = inglese
+#                   Usato per selezionare il template pulsante rifornimento
 # ==============================================================================
 
 # --- BlueStacks ---
 ISTANZE = [
-    #["FAU_00", "Pie64_13", "5685", 0,     5, 1],
-    #["FAU_01", "Pie64_6",  "5615", 12000, 4, 1],
-    #["FAU_02", "Pie64",    "5555", 12000, 4, 1],
-    #["FAU_03", "Pie64_7",  "5625", 12000, 4, 1],
-    #["FAU_04", "Pie64_8",  "5635", 12000, 4, 1],
-    #["FAU_05", "Pie64_9",  "5645", 12000, 4, 1],
-    #["FAU_06", "Pie64_11", "5665", 12000, 4, 1],
-    #["FAU_07", "Pie64_10", "5655", 12000, 4, 1],
-    ["FAU_08", "Pie64_12", "5675", 12000, 4, 1],
-    ["FAU_09", "Pie64_14", "5695", 12000, 4, 2],  # layout 2: 4 icone, no Bestia
+    {"nome": "FAU_00", "interno": "Pie64_13", "porta": "5685", "truppe": 0,     "max_squadre": 5, "layout": 1, "abilitata": False},
+    {"nome": "FAU_01", "interno": "Pie64_6",  "porta": "5615", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_02", "interno": "Pie64",    "porta": "5555", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_03", "interno": "Pie64_7",  "porta": "5625", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_04", "interno": "Pie64_8",  "porta": "5635", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_05", "interno": "Pie64_9",  "porta": "5645", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_06", "interno": "Pie64_11", "porta": "5665", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_07", "interno": "Pie64_10", "porta": "5655", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
+    {"nome": "FAU_08", "interno": "Pie64_12", "porta": "5675", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": True},
+    {"nome": "FAU_09", "interno": "Pie64_14", "porta": "5695", "truppe": 12000, "max_squadre": 4, "layout": 2, "abilitata": True},  # layout 2: 4 icone, no Bestia
 ]
 
 # --- MuMuPlayer ---
-# Struttura (7 campi):
-# [nome, indice_mumu, porta_adb, truppe_raccolta, max_squadre, layout_barra, lingua]
-#
-#   lingua: "it" = italiano (default) | "en" = inglese
-#           Usato per selezionare il template corretto del pulsante rifornimento
 ISTANZE_MUMU = [
-    ["FAU_00", "0", 16384, 0,     5, 1, "en"],
-    ["FAU_01", "1", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_02", "2", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_03", "3", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_04", "4", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_05", "5", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_06", "6", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_07", "7", 16384, 12000, 4, 1, "en"],  # gioco in inglese    
-    ["FAU_08", "8", 16384, 12000, 4, 1, "en"],  # gioco in inglese
-    ["FAU_09", "9", 16384, 12000, 4, 2, "en"],  # gioco in italiano, layout 2
+    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "abilitata": True},
 ]
 
 # ==============================================================================
@@ -167,9 +170,9 @@ COORD_ALLEANZA_LAYOUT = {
     2: (800, 505),   # compatto — 4 icone (Campagna/Zaino/Alleanza/Eroe) — no Bestia
 }
 
-def get_coord_alleanza(ist: list) -> tuple:
+def get_coord_alleanza(ist: dict) -> tuple:
     """Ritorna coordinate pulsante Alleanza per l'istanza data."""
-    layout = ist[5] if len(ist) > 5 else 1
+    layout = ist.get("layout", 1)
     return COORD_ALLEANZA_LAYOUT.get(layout, COORD_ALLEANZA_LAYOUT[1])
 
 # --- Tap principali ---
@@ -269,10 +272,14 @@ DELAY_MARCIA      = 4000   # ms attesa dopo MARCIA
 SCHEDULE_ORE_MESSAGGI = 12   # ore minime tra esecuzioni raccolta messaggi
 SCHEDULE_ORE_ALLEANZA = 12   # ore minime tra esecuzioni raccolta alleanza
 
+# --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
+ALLEANZA_ABILITATA = True    # False = salta raccolta doni alleanza
+MESSAGGI_ABILITATI = True    # False = salta raccolta messaggi sistema/alleanza
+
 # --- Rifornimento alleanza ---
 RIFORNIMENTO_ABILITATO         = True
 DOOMS_ACCOUNT                  = "FauMorfeus"
-DOOMS_AVATAR                   = "templates/avatar_faumorfeus.png"
+DOOMS_AVATAR                   = "templates/avatar.png"
 RIFORNIMENTO_BTN_TEMPLATE      = "templates/btn_risorse_approv.png"       # IT
 RIFORNIMENTO_BTN_TEMPLATE_EN   = "templates/btn_supply_resources.png"     # EN
 RIFORNIMENTO_SOGLIA_M          = 5.0
@@ -282,11 +289,11 @@ RIFORNIMENTO_QTA_LEGNO         = 999_000_000
 RIFORNIMENTO_QTA_ACCIAIO       = 0
 RIFORNIMENTO_QTA_PETROLIO      = 999_000_000
 
-def get_lingua(ist: list) -> str:
+def get_lingua(ist: dict) -> str:
     """Ritorna la lingua dell'istanza ('it' o 'en'). Default 'it'."""
-    return ist[6] if len(ist) > 6 else "it"
+    return ist.get("lingua", "it")
 
-def get_btn_rifornimento_template(ist: list) -> str:
+def get_btn_rifornimento_template(ist: dict) -> str:
     """Ritorna il path del template pulsante rifornimento per la lingua dell'istanza."""
     if get_lingua(ist) == "en":
         return RIFORNIMENTO_BTN_TEMPLATE_EN

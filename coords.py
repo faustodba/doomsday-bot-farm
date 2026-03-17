@@ -80,10 +80,10 @@ class UICoords:
     # Factory — unico punto di costruzione
     # ------------------------------------------------------------------
     @classmethod
-    def da_ist(cls, ist: list) -> "UICoords":
+    def da_ist(cls, ist: dict) -> "UICoords":
         """
-        Costruisce UICoords dall'elemento ISTANZE/ISTANZE_MUMU.
-        ist: [nome, interno, porta, truppe, max_squadre, layout_barra]
+        Costruisce UICoords dall'elemento ISTANZE/ISTANZE_MUMU (dizionario).
+        ist: {"nome": ..., "interno"/"indice": ..., "porta": ..., "layout": ..., ...}
         """
         alleanza = config.get_coord_alleanza(ist)
 

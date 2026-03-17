@@ -294,6 +294,8 @@
     <h3>Parametri globali</h3>
     <div class="rt-row"><label>Istanze parallele</label><input type="number" id="rt_blocco" min="1" max="10" step="1"></div>
     <div class="rt-row"><label>Attesa tra cicli (min)</label><input type="number" id="rt_wait" min="1" max="60" step="1"></div>
+    <div class="rt-row"><label>Alleanza abilitata</label><input type="checkbox" id="rt_alleanza_on"></div>
+    <div class="rt-row"><label>Messaggi abilitati</label><input type="checkbox" id="rt_messaggi_on"></div>
     <div class="rt-row"><label>Rifornimento abilitato</label><input type="checkbox" id="rt_rif_on"></div>
     <div class="rt-row"><label>Soglia invio pomodoro/legno (M)</label><input type="number" id="rt_soglia" min="0.1" max="50" step="0.5"></div>
     <div class="rt-row"><label>Soglia invio petrolio (M)</label><input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5"></div>
@@ -672,11 +674,13 @@ async function rtCarica() {
 
 function rtPopolaGlobali(rt) {
   const g = rt.globali || {};
-  _setVal("rt_blocco",      g.ISTANZE_BLOCCO ?? 1);
-  _setVal("rt_wait",        g.WAIT_MINUTI ?? 1);
-  _setChk("rt_rif_on",      g.RIFORNIMENTO_ABILITATO ?? true);
-  _setVal("rt_soglia",      g.RIFORNIMENTO_SOGLIA_M ?? 5.0);
-  _setVal("rt_soglia_pet",  g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
+  _setVal("rt_blocco",          g.ISTANZE_BLOCCO ?? 1);
+  _setVal("rt_wait",            g.WAIT_MINUTI ?? 1);
+  _setChk("rt_alleanza_on",     g.ALLEANZA_ABILITATA ?? true);
+  _setChk("rt_messaggi_on",     g.MESSAGGI_ABILITATI ?? true);
+  _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
+  _setVal("rt_soglia",          g.RIFORNIMENTO_SOGLIA_M ?? 5.0);
+  _setVal("rt_soglia_pet",      g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
   const ratio = g.ALLOCATION_RATIO || {};
   _setVal("rt_r_campo", Math.round((ratio.campo    ?? 0.375)  * 100));
   _setVal("rt_r_seg",   Math.round((ratio.segheria ?? 0.375)  * 100));
@@ -689,14 +693,20 @@ function rtCaricaIstanze() {
   if (!_cfgIstanze || !_rtData) return;
   const emu      = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
   const lista    = emu === "bs" ? (_cfgIstanze.istanze_bs || []) : (_cfgIstanze.istanze_mumu || []);
-  const overrides = _rtData.overrides || {};
+
+  // Supporta struttura nuova {bs:{...}, mumu:{...}} e flat legacy {FAU_00:{...}}
+  const ovr_root = _rtData.overrides || {};
+  const overrides = (emu === "bs" && ovr_root.bs !== undefined)  ? ovr_root.bs
+                  : (emu === "mumu" && ovr_root.mumu !== undefined) ? ovr_root.mumu
+                  : ovr_root;  // fallback flat legacy
+
   const tbody    = document.getElementById("rt_ist_tbody");
   tbody.innerHTML = "";
 
   lista.forEach((ist) => {
     const ovr = overrides[ist.nome] || {};
-    // Valori effettivi: override se presente, altrimenti valore da config.py
-    const abilitata   = ovr.abilitata   !== undefined ? ovr.abilitata   : true;
+    // Priorità abilitata: override runtime > config.py
+    const abilitata   = ovr.abilitata   !== undefined ? ovr.abilitata   : (ist.abilitata ?? true);
     const truppe      = ovr.truppe      !== undefined ? ovr.truppe      : (ist.truppe      ?? 12000);
     const max_squadre = ovr.max_squadre !== undefined ? ovr.max_squadre : (ist.max_squadre ?? 4);
     const layout      = ovr.layout      !== undefined ? ovr.layout      : (ist.layout      ?? 1);
@@ -704,6 +714,8 @@ function rtCaricaIstanze() {
 
     const tr = document.createElement("tr");
     tr.dataset.nome = ist.nome;
+    // Riga attenuata se disabilitata
+    tr.style.opacity = abilitata ? "1" : "0.45";
     tr.innerHTML = `
       <td><input type="checkbox" data-field="abilitata" ${abilitata ? "checked" : ""}></td>
       <td style="color:var(--accent);font-weight:bold">${ist.nome}
@@ -715,6 +727,12 @@ function rtCaricaIstanze() {
         <option value="1" ${layout==1?"selected":""}>1</option>
         <option value="2" ${layout==2?"selected":""}>2</option>
       </select></td>`;
+
+    // Toggle visivo opacity al cambio checkbox
+    tr.querySelector('[data-field="abilitata"]').addEventListener("change", function() {
+      tr.style.opacity = this.checked ? "1" : "0.45";
+    });
+
     tbody.appendChild(tr);
   });
 
@@ -759,6 +777,8 @@ async function rtSalvaGlobali() {
     ..._rtData.globali,
     ISTANZE_BLOCCO:                 +_val("rt_blocco"),
     WAIT_MINUTI:                    +_val("rt_wait"),
+    ALLEANZA_ABILITATA:             document.getElementById("rt_alleanza_on").checked,
+    MESSAGGI_ABILITATI:             document.getElementById("rt_messaggi_on").checked,
     RIFORNIMENTO_ABILITATO:         document.getElementById("rt_rif_on").checked,
     RIFORNIMENTO_SOGLIA_M:          +_val("rt_soglia"),
     RIFORNIMENTO_SOGLIA_PETROLIO_M: +_val("rt_soglia_pet"),
@@ -770,15 +790,20 @@ async function rtSalvaGlobali() {
   btn.disabled = false;
 }
 
-// Salva istanze — scrive solo gli overrides (delta rispetto a config.py)
+// Salva istanze — scrive solo gli overrides (delta rispetto a config.py) nel namespace corretto
 async function rtSalvaIstanze() {
   if (!_rtData || !_cfgIstanze) return;
   const btn = document.getElementById("rt_save_ist");
   const emu = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
   btn.disabled = true;
 
-  const lista  = emu === "bs" ? (_cfgIstanze.istanze_bs || []) : (_cfgIstanze.istanze_mumu || []);
-  const ovrs   = _rtData.overrides || {};
+  const lista = emu === "bs" ? (_cfgIstanze.istanze_bs || []) : (_cfgIstanze.istanze_mumu || []);
+
+  // Assicura struttura namespace nel payload
+  if (!_rtData.overrides) _rtData.overrides = {};
+  if (!_rtData.overrides.bs)   _rtData.overrides.bs   = {};
+  if (!_rtData.overrides.mumu) _rtData.overrides.mumu = {};
+  const ovrs = _rtData.overrides[emu];  // bs o mumu
 
   // Leggi valori dalla tabella e costruisci overrides
   document.querySelectorAll("#rt_ist_tbody tr[data-nome]").forEach(tr => {
@@ -793,22 +818,25 @@ async function rtSalvaIstanze() {
 
     // Costruisci delta: solo i campi che differiscono dal default config.py
     const delta = {};
-    if (!abilitata)                          delta.abilitata   = false;
-    if (truppe      !== (ist.truppe      ?? 12000)) delta.truppe      = truppe;
-    if (max_squadre !== (ist.max_squadre ?? 4))     delta.max_squadre = max_squadre;
-    if (layout      !== (ist.layout      ?? 1))     delta.layout      = layout;
+    const cfg_abilitata   = ist.abilitata   ?? true;
+    const cfg_truppe      = ist.truppe      ?? 12000;
+    const cfg_max_squadre = ist.max_squadre ?? 4;
+    const cfg_layout      = ist.layout      ?? 1;
+
+    if (abilitata   !== cfg_abilitata)   delta.abilitata   = abilitata;
+    if (truppe      !== cfg_truppe)      delta.truppe      = truppe;
+    if (max_squadre !== cfg_max_squadre) delta.max_squadre = max_squadre;
+    if (layout      !== cfg_layout)      delta.layout      = layout;
 
     if (Object.keys(delta).length > 0) {
       ovrs[nome] = { ...(ovrs[nome] || {}), ...delta };
     } else {
-      // Nessun override → rimuovi la chiave se esiste (ripristina default)
       delete ovrs[nome];
     }
   });
 
-  _rtData.overrides = ovrs;
   const ok = await _rtPost(_rtData);
-  _rtMsg("rt_msg_ist", ok ? "✓ Salvato — operativo dal prossimo ciclo" : "✗ Errore salvataggio", ok);
+  _rtMsg("rt_msg_ist", ok ? `✓ Salvato [${emu.toUpperCase()}] — operativo dal prossimo ciclo` : "✗ Errore salvataggio", ok);
   btn.disabled = false;
 }
 

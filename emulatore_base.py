@@ -51,7 +51,9 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
        -2      timeout caricamento
        -3      watchdog (gioco non risponde)
     """
-    nome, interno, porta = ist[0], ist[1], ist[2]
+    nome    = ist["nome"]
+    interno = ist.get("interno") or ist.get("indice", "")
+    porta   = ist["porta"]
 
     def log(msg):
         if logger: logger(nome, msg)

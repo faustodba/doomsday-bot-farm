@@ -319,6 +319,11 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
     except Exception:
         eta_s, raw = None, ""
 
+    # Cap ETA: valori superiori a 600s sono misread OCR — scartali
+    if eta_s is not None and eta_s > 600:
+        log(f"ETA marcia: {eta_s}s — valore anomalo (misread OCR), ignorato")
+        eta_s = None
+
     if eta_s is not None:
         log(f"ETA marcia: {eta_s}s ({eta_s//60}m{eta_s%60:02d}s)")
     elif tentativo == 1:
@@ -337,6 +342,9 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 
         try:
             eta_s2, raw2 = ocr.leggi_eta_marcia(screen_pre)
+            if eta_s2 is not None and eta_s2 > 600:
+                log(f"ETA marcia (retry): {eta_s2}s — valore anomalo (misread OCR), ignorato")
+                eta_s2 = None
             if eta_s2 is not None:
                 eta_s = eta_s2
                 log(f"ETA marcia (retry): {eta_s}s ({eta_s//60}m{eta_s%60:02d}s)")
@@ -501,10 +509,16 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     _status.istanza_raccolta(nome)
 
     import messaggi as _msg
-    _msg.raccolta_messaggi(porta, nome, logger)
+    if getattr(config, "MESSAGGI_ABILITATI", True):
+        _msg.raccolta_messaggi(porta, nome, logger)
+    else:
+        log("Messaggi disabilitati (MESSAGGI_ABILITATI=False) - skip")
 
     import alleanza as _all
-    _all.raccolta_alleanza(porta, nome, logger, ist=ist)
+    if getattr(config, "ALLEANZA_ABILITATA", True):
+        _all.raccolta_alleanza(porta, nome, logger, ist=ist)
+    else:
+        log("Alleanza disabilitata (ALLEANZA_ABILITATA=False) - skip")
 
     # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
     try:

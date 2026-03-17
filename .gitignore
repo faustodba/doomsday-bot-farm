@@ -49,3 +49,8 @@ step_*/
 
 # File JSON runtime (già presenti ma aggiungo pattern espliciti)
 *.tmp
+
+
+# PNG: ignora tutto tranne i template ufficiali
+*.png
+!templates/*.png
