@@ -34,3 +34,18 @@ archive_obsolete.bat
 
 # gitignore senza punto (il vecchio)
 gitignore
+
+
+# Screenshot di test/debug nella root
+screen_*.png
+popup_bot.png
+screen_supply.png
+mumu_*.png
+debug_*.png
+
+# Cartelle di backup sessione (es. "step 20260316 09.28/")
+step */
+step_*/
+
+# File JSON runtime (già presenti ma aggiungo pattern espliciti)
+*.tmp
