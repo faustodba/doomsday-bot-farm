@@ -649,23 +649,17 @@ loop();
 <script>
 // ==============================================================================
 //  Runtime panel — carica/salva runtime.json via fetch
-//  Nuova architettura: runtime.json contiene solo globali + overrides.
-//  Le istanze vengono lette fresche da /config_istanze.json (config.py).
 // ==============================================================================
 
-let _rtData      = null;  // cache runtime.json (globali + overrides)
-let _cfgIstanze  = null;  // cache config_istanze.json (istanze fresche da config.py)
+let _rtData = null;  // cache locale del runtime.json
 
-// Carica runtime.json e config_istanze.json
+// Carica runtime.json e popola i form
 async function rtCarica() {
   try {
-    const [resRt, resCfg] = await Promise.all([
-      fetch("runtime.json?t="       + Date.now()),
-      fetch("config_istanze.json?t=" + Date.now()),
-    ]);
-    if (resRt.ok)  _rtData     = await resRt.json();
-    if (resCfg.ok) _cfgIstanze = await resCfg.json();
-    if (_rtData) rtPopolaGlobali(_rtData);
+    const res = await fetch("runtime.json?t=" + Date.now());
+    if (!res.ok) return;
+    _rtData = await res.json();
+    rtPopolaGlobali(_rtData);
     rtCaricaIstanze();
   } catch(e) { /* server non ancora avviato */ }
 }
@@ -686,44 +680,24 @@ function rtPopolaGlobali(rt) {
 }
 
 function rtCaricaIstanze() {
-  if (!_cfgIstanze || !_rtData) return;
-  const emu      = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
-  const lista    = emu === "bs" ? (_cfgIstanze.istanze_bs || []) : (_cfgIstanze.istanze_mumu || []);
-  const overrides = _rtData.overrides || {};
-  const tbody    = document.getElementById("rt_ist_tbody");
+  if (!_rtData) return;
+  const emu   = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
+  const lista = emu === "bs" ? (_rtData.istanze_bs || []) : (_rtData.istanze_mumu || []);
+  const tbody = document.getElementById("rt_ist_tbody");
   tbody.innerHTML = "";
-
-  lista.forEach((ist) => {
-    const ovr = overrides[ist.nome] || {};
-    // Valori effettivi: override se presente, altrimenti valore da config.py
-    const abilitata   = ovr.abilitata   !== undefined ? ovr.abilitata   : true;
-    const truppe      = ovr.truppe      !== undefined ? ovr.truppe      : (ist.truppe      ?? 12000);
-    const max_squadre = ovr.max_squadre !== undefined ? ovr.max_squadre : (ist.max_squadre ?? 4);
-    const layout      = ovr.layout      !== undefined ? ovr.layout      : (ist.layout      ?? 1);
-    const lingua      = ist.lingua ?? "it";
-
+  lista.forEach((ist, idx) => {
     const tr = document.createElement("tr");
-    tr.dataset.nome = ist.nome;
     tr.innerHTML = `
-      <td><input type="checkbox" data-field="abilitata" ${abilitata ? "checked" : ""}></td>
-      <td style="color:var(--accent);font-weight:bold">${ist.nome}
-        <span style="font-size:9px;color:var(--text-dim);margin-left:4px">${lingua.toUpperCase()}</span>
-      </td>
-      <td><input type="number" data-field="truppe"      value="${truppe}"      min="0"   max="99999" step="1000"></td>
-      <td><input type="number" data-field="max_squadre" value="${max_squadre}" min="1"   max="5"     step="1"></td>
-      <td><select data-field="layout">
-        <option value="1" ${layout==1?"selected":""}>1</option>
-        <option value="2" ${layout==2?"selected":""}>2</option>
+      <td><input type="checkbox" data-idx="${idx}" data-field="abilitata" ${ist.abilitata!==false?"checked":""}></td>
+      <td style="color:var(--accent);font-weight:bold">${ist.nome}</td>
+      <td><input type="number" data-idx="${idx}" data-field="truppe"      value="${ist.truppe??12000}"  min="0" max="99999" step="1000"></td>
+      <td><input type="number" data-idx="${idx}" data-field="max_squadre" value="${ist.max_squadre??4}" min="1" max="5"     step="1"></td>
+      <td><select data-idx="${idx}" data-field="layout">
+        <option value="1" ${(ist.layout??1)==1?"selected":""}>1</option>
+        <option value="2" ${(ist.layout??1)==2?"selected":""}>2</option>
       </select></td>`;
     tbody.appendChild(tr);
   });
-
-  // Mostra messaggio se nessuna istanza
-  if (lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text-dim);padding:8px">
-      Nessuna istanza configurata in config.py per ${emu === "bs" ? "BlueStacks" : "MuMuPlayer"}
-    </td></tr>`;
-  }
 }
 
 // Aggiorna label totale ratio
@@ -757,10 +731,10 @@ async function rtSalvaGlobali() {
 
   _rtData.globali = {
     ..._rtData.globali,
-    ISTANZE_BLOCCO:                 +_val("rt_blocco"),
-    WAIT_MINUTI:                    +_val("rt_wait"),
-    RIFORNIMENTO_ABILITATO:         document.getElementById("rt_rif_on").checked,
-    RIFORNIMENTO_SOGLIA_M:          +_val("rt_soglia"),
+    ISTANZE_BLOCCO:               +_val("rt_blocco"),
+    WAIT_MINUTI:                  +_val("rt_wait"),
+    RIFORNIMENTO_ABILITATO:       document.getElementById("rt_rif_on").checked,
+    RIFORNIMENTO_SOGLIA_M:        +_val("rt_soglia"),
     RIFORNIMENTO_SOGLIA_PETROLIO_M: +_val("rt_soglia_pet"),
     ALLOCATION_RATIO: { campo, segheria: seg, petrolio: pet, acciaio: acc },
   };
@@ -770,43 +744,27 @@ async function rtSalvaGlobali() {
   btn.disabled = false;
 }
 
-// Salva istanze — scrive solo gli overrides (delta rispetto a config.py)
+// Salva istanze
 async function rtSalvaIstanze() {
-  if (!_rtData || !_cfgIstanze) return;
-  const btn = document.getElementById("rt_save_ist");
-  const emu = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
+  if (!_rtData) return;
+  const btn  = document.getElementById("rt_save_ist");
+  const emu  = document.querySelector('input[name=rt_emu]:checked')?.value ?? "bs";
+  const key  = emu === "bs" ? "istanze_bs" : "istanze_mumu";
+  const lista = _rtData[key] || [];
   btn.disabled = true;
 
-  const lista  = emu === "bs" ? (_cfgIstanze.istanze_bs || []) : (_cfgIstanze.istanze_mumu || []);
-  const ovrs   = _rtData.overrides || {};
-
-  // Leggi valori dalla tabella e costruisci overrides
-  document.querySelectorAll("#rt_ist_tbody tr[data-nome]").forEach(tr => {
-    const nome = tr.dataset.nome;
-    const ist  = lista.find(i => i.nome === nome);
-    if (!ist) return;
-
-    const abilitata   = tr.querySelector('[data-field="abilitata"]')?.checked ?? true;
-    const truppe      = +(tr.querySelector('[data-field="truppe"]')?.value      ?? ist.truppe);
-    const max_squadre = +(tr.querySelector('[data-field="max_squadre"]')?.value ?? ist.max_squadre);
-    const layout      = +(tr.querySelector('[data-field="layout"]')?.value      ?? ist.layout);
-
-    // Costruisci delta: solo i campi che differiscono dal default config.py
-    const delta = {};
-    if (!abilitata)                          delta.abilitata   = false;
-    if (truppe      !== (ist.truppe      ?? 12000)) delta.truppe      = truppe;
-    if (max_squadre !== (ist.max_squadre ?? 4))     delta.max_squadre = max_squadre;
-    if (layout      !== (ist.layout      ?? 1))     delta.layout      = layout;
-
-    if (Object.keys(delta).length > 0) {
-      ovrs[nome] = { ...(ovrs[nome] || {}), ...delta };
-    } else {
-      // Nessun override → rimuovi la chiave se esiste (ripristina default)
-      delete ovrs[nome];
-    }
+  // Leggi valori dalla tabella
+  document.querySelectorAll("#rt_ist_tbody tr").forEach((tr, idx) => {
+    if (idx >= lista.length) return;
+    tr.querySelectorAll("[data-field]").forEach(el => {
+      const field = el.dataset.field;
+      if (el.type === "checkbox") lista[idx][field] = el.checked;
+      else if (el.tagName === "SELECT") lista[idx][field] = +el.value;
+      else lista[idx][field] = el.type === "number" ? +el.value : el.value;
+    });
   });
+  _rtData[key] = lista;
 
-  _rtData.overrides = ovrs;
   const ok = await _rtPost(_rtData);
   _rtMsg("rt_msg_ist", ok ? "✓ Salvato — operativo dal prossimo ciclo" : "✗ Errore salvataggio", ok);
   btn.disabled = false;
@@ -835,7 +793,7 @@ function _rtMsg(id, txt, ok) {
   setTimeout(() => { el.textContent = ""; el.className = "rt-msg"; }, 4000);
 }
 
-// Carica runtime al primo avvio e poi ogni 10s
+// Carica runtime al primo avvio e poi ogni 10s (per riflettere modifiche esterne)
 rtCarica();
 setInterval(rtCarica, 10000);
 </script>

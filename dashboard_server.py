@@ -6,28 +6,107 @@
 #  Avvio da main:   import dashboard_server (si avvia da solo in thread daemon)
 #
 #  URL dashboard:   http://localhost:8080/dashboard.html
+#
+#  Endpoints:
+#    GET  /dashboard.html        → dashboard
+#    GET  /status.json           → stato bot (aggiornato da status.py)
+#    GET  /runtime.json          → parametri runtime correnti
+#    POST /runtime.json          → salva parametri runtime (dalla dashboard)
+#    GET  /config_istanze.json   → istanze fresche da config.py (BS + MuMu)
 # ==============================================================================
 
 import http.server
 import threading
 import os
-import sys
 import json
 
 PORT = 8080
 
+
+def _importa_modulo(nome, cartella):
+    """Importa un modulo Python dalla cartella del bot, con cache in sys.modules."""
+    import sys, importlib.util
+    if nome not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            nome, os.path.join(cartella, f"{nome}.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules[nome] = mod
+    return sys.modules[nome]
+
+
 def _run():
-    # Serve i file dalla cartella dove si trova questo script
     cartella = os.path.dirname(os.path.abspath(__file__))
     os.chdir(cartella)
 
     class Handler(http.server.SimpleHTTPRequestHandler):
 
         def log_message(self, format, *args):
-            pass  # Silenzia i log HTTP per non sporcare la console
+            pass  # Silenzia i log HTTP
 
+        # ------------------------------------------------------------------
+        # CORS — aggiunto a ogni risposta
+        # ------------------------------------------------------------------
+        def end_headers(self):
+            self.send_header("Access-Control-Allow-Origin",  "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            super().end_headers()
+
+        def do_OPTIONS(self):
+            """CORS preflight."""
+            self.send_response(200)
+            self.end_headers()
+
+        # ------------------------------------------------------------------
+        # GET
+        # ------------------------------------------------------------------
+        def do_GET(self):
+            if self.path.startswith("/config_istanze.json"):
+                self._serve_config_istanze()
+                return
+            # Tutti gli altri GET → file statici (dashboard.html, status.json, ...)
+            super().do_GET()
+
+        def _serve_config_istanze(self):
+            """Restituisce le istanze fresche da config.py come JSON."""
+            try:
+                cfg = _importa_modulo("config", cartella)
+
+                def _bs(ist):
+                    return {
+                        "nome":        ist[0],
+                        "interno":     ist[1],
+                        "porta":       ist[2],
+                        "truppe":      ist[3] if len(ist) > 3 else 12000,
+                        "max_squadre": ist[4] if len(ist) > 4 else 4,
+                        "layout":      ist[5] if len(ist) > 5 else 1,
+                        "lingua":      ist[6] if len(ist) > 6 else "it",
+                    }
+
+                def _mumu(ist):
+                    return {
+                        "nome":        ist[0],
+                        "indice":      ist[1],
+                        "porta":       ist[2],
+                        "truppe":      ist[3] if len(ist) > 3 else 12000,
+                        "max_squadre": ist[4] if len(ist) > 4 else 4,
+                        "layout":      ist[5] if len(ist) > 5 else 1,
+                        "lingua":      ist[6] if len(ist) > 6 else "it",
+                    }
+
+                payload = {
+                    "istanze_bs":   [_bs(i)   for i in getattr(cfg, "ISTANZE",      [])],
+                    "istanze_mumu": [_mumu(i) for i in getattr(cfg, "ISTANZE_MUMU", [])],
+                }
+                self._json_ok(payload)
+            except Exception as e:
+                self._json_err(str(e))
+
+        # ------------------------------------------------------------------
+        # POST
+        # ------------------------------------------------------------------
         def do_POST(self):
-            """Gestisce POST /runtime.json — salva i parametri runtime dal browser."""
             if self.path != "/runtime.json":
                 self.send_response(404)
                 self.end_headers()
@@ -37,50 +116,48 @@ def _run():
                 body   = self.rfile.read(length)
                 dati   = json.loads(body.decode("utf-8"))
 
-                # Importa runtime dal bot dir (già nel sys.path poiché abbiamo fatto os.chdir)
-                import importlib, sys as _sys
-                if "runtime" not in _sys.modules:
-                    import importlib.util
-                    spec = importlib.util.spec_from_file_location(
-                        "runtime", os.path.join(cartella, "runtime.py"))
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
-                    _sys.modules["runtime"] = mod
-                import runtime
-                ok = runtime.salva(dati)
+                # Scrivi direttamente su runtime.json nella cartella del bot
+                # Scrittura atomica: tmp → replace
+                path_json = os.path.join(cartella, "runtime.json")
+                path_tmp  = path_json + ".tmp"
+                with open(path_tmp, "w", encoding="utf-8") as f:
+                    json.dump(dati, f, ensure_ascii=False, indent=2)
+                os.replace(path_tmp, path_json)
 
-                self.send_response(200 if ok else 500)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(json.dumps({"ok": ok}).encode())
+                self._json_ok({"ok": True})
             except Exception as e:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode())
+                self._json_err(str(e))
 
-        def do_OPTIONS(self):
-            """CORS preflight."""
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # ------------------------------------------------------------------
+        # Utility
+        # ------------------------------------------------------------------
+        def _json_ok(self, payload, status=200):
+            body = json.dumps(payload, ensure_ascii=False).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
+            self.wfile.write(body)
 
-        def end_headers(self):
-            self.send_header("Access-Control-Allow-Origin", "*")
-            super().end_headers()
+        def _json_err(self, msg, status=500):
+            body = json.dumps({"ok": False, "error": msg}).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
     server = http.server.HTTPServer(("", PORT), Handler)
     print(f"[dashboard] Server avviato → http://localhost:{PORT}/dashboard.html")
     server.serve_forever()
+
 
 def avvia():
     """Avvia il server in background (thread daemon). Chiamare da main.py."""
     t = threading.Thread(target=_run, daemon=True)
     t.start()
 
-# Se lanciato direttamente (python dashboard_server.py) gira in foreground
+
 if __name__ == "__main__":
     print(f"[dashboard] Avvio server su porta {PORT}...")
     print(f"[dashboard] Apri → http://localhost:{PORT}/dashboard.html")

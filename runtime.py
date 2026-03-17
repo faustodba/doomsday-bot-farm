@@ -2,15 +2,37 @@
 #  DOOMSDAY BOT V5 - runtime.py
 #  Configurazione modificabile a runtime senza riavviare il bot.
 #
-#  Il file runtime.json viene riletto all'inizio di ogni ciclo in main.py.
-#  Le modifiche sono operative dal ciclo successivo.
+#  ARCHITETTURA:
+#    runtime.json NON contiene liste di istanze — quelle stanno in config.py.
+#    Contiene solo:
+#      - globali:   parametri ciclo modificabili (ISTANZE_BLOCCO, WAIT_MINUTI, ...)
+#      - overrides: delta per-istanza (solo ciò che l'utente ha modificato)
+#
+#    Struttura runtime.json:
+#    {
+#      "globali": { "ISTANZE_BLOCCO": 1, "WAIT_MINUTI": 1, ... },
+#      "overrides": {
+#        "FAU_09": { "abilitata": false, "max_squadre": 3 }
+#      }
+#    }
+#
+#  FLUSSO ogni ciclo:
+#    1. carica()             → legge runtime.json (globali + overrides)
+#    2. applica(rt)          → sovrascrive config.* in memoria
+#    3. istanze_attive(...)  → legge FRESH da config.py, applica overrides
+#
+#  VANTAGGI:
+#    - Aggiungere/rimuovere istanze in config.py è immediatamente visibile
+#    - Il json non contiene BS quando si usa MuMu e viceversa
+#    - Nessun merge complesso, nessuna desincronizzazione
+#    - Il json è piccolo e leggibile
 #
 #  API pubblica:
-#    carica()                          → dict con tutti i parametri
-#    applica(rt)                       → sovrascrive config.* in memoria
-#    istanze_attive(rt, emulatore)     → lista istanze abilitate nel formato config
-#    salva(dati)                       → scrive runtime.json (chiamato da dashboard)
-#    inizializza_se_mancante()         → crea runtime.json da config.py se non esiste
+#    carica()                      -> dict
+#    applica(rt)                   -> None
+#    istanze_attive(rt, emulatore) -> list
+#    salva(dati)                   -> bool
+#    inizializza_se_mancante()     -> None
 # ==============================================================================
 
 import json
@@ -18,49 +40,26 @@ import os
 import threading
 import config
 
-_lock      = threading.Lock()
-_PATH      = os.path.join(config.BOT_DIR, "runtime.json")
+_lock = threading.Lock()
+_PATH = os.path.join(config.BOT_DIR, "runtime.json")
 
-# ------------------------------------------------------------------------------
-# Struttura default — specchia config.py come punto di partenza
-# ------------------------------------------------------------------------------
+
+# ==============================================================================
+# Struttura default
+# ==============================================================================
 def _default() -> dict:
-    """Costruisce la struttura runtime di default leggendo config.py."""
-
-    def _ist_bs(ist: list) -> dict:
-        return {
-            "nome":        ist[0],
-            "interno":     ist[1],
-            "porta":       ist[2],
-            "abilitata":   True,
-            "truppe":      ist[3] if len(ist) > 3 else 12000,
-            "max_squadre": ist[4] if len(ist) > 4 else 4,
-            "layout":      ist[5] if len(ist) > 5 else 1,
-        }
-
-    def _ist_mumu(ist: list) -> dict:
-        # ISTANZE_MUMU: [nome, indice, porta]
-        # truppe/max_squadre/layout: stessi default di BS per coerenza
-        nome = ist[0]
-        # Cerca i parametri di gioco dall'istanza BS corrispondente (stesso nome)
-        ist_bs = next((i for i in config.ISTANZE if i[0] == nome), None)
-        return {
-            "nome":        nome,
-            "indice":      ist[1],
-            "porta":       ist[2],
-            "abilitata":   True,
-            "truppe":      ist_bs[3] if ist_bs and len(ist_bs) > 3 else 12000,
-            "max_squadre": ist_bs[4] if ist_bs and len(ist_bs) > 4 else 4,
-            "layout":      ist_bs[5] if ist_bs and len(ist_bs) > 5 else 1,
-        }
-
     return {
-        "_nota": "Modificabile a runtime — riletto ogni ciclo senza riavviare il bot",
+        "_nota": (
+            "Modificabile a runtime — riletto ogni ciclo. "
+            "Le istanze vengono sempre lette da config.py. "
+            "Usa 'overrides' per modificare singole istanze "
+            "(es. {\"FAU_09\": {\"abilitata\": false, \"max_squadre\": 2}})."
+        ),
         "globali": {
-            "ISTANZE_BLOCCO":               getattr(config, "ISTANZE_BLOCCO", 1),
-            "WAIT_MINUTI":                  getattr(config, "WAIT_MINUTI", 1),
-            "RIFORNIMENTO_ABILITATO":       getattr(config, "RIFORNIMENTO_ABILITATO", True),
-            "RIFORNIMENTO_SOGLIA_M":        getattr(config, "RIFORNIMENTO_SOGLIA_M", 5.0),
+            "ISTANZE_BLOCCO":                 getattr(config, "ISTANZE_BLOCCO", 1),
+            "WAIT_MINUTI":                    getattr(config, "WAIT_MINUTI", 1),
+            "RIFORNIMENTO_ABILITATO":         getattr(config, "RIFORNIMENTO_ABILITATO", True),
+            "RIFORNIMENTO_SOGLIA_M":          getattr(config, "RIFORNIMENTO_SOGLIA_M", 5.0),
             "RIFORNIMENTO_SOGLIA_PETROLIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5),
             "ALLOCATION_RATIO": {
                 "campo":    0.3750,
@@ -69,56 +68,101 @@ def _default() -> dict:
                 "acciaio":  0.0625,
             },
         },
-        "istanze_bs":   [_ist_bs(i)   for i in getattr(config, "ISTANZE",      [])],
-        "istanze_mumu": [_ist_mumu(i) for i in getattr(config, "ISTANZE_MUMU", [])],
+        "overrides": {},
     }
 
 
-# ------------------------------------------------------------------------------
-# Inizializza runtime.json se non esiste
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# Inizializza / migra runtime.json
+# ==============================================================================
 def inizializza_se_mancante():
     """
-    Crea runtime.json da config.py se il file non esiste ancora.
-    Chiamare una volta all'avvio in main.py.
+    - Se runtime.json non esiste: lo crea con la struttura nuova.
+    - Se esiste con struttura VECCHIA (istanze_bs/istanze_mumu): migra
+      automaticamente estraendo gli overrides significativi.
+    - Se esiste con struttura nuova: aggiunge solo chiavi globali mancanti.
     """
     with _lock:
         if not os.path.exists(_PATH):
             _scrivi_raw(_default())
-            print(f"[RUNTIME] runtime.json creato da config.py → {_PATH}")
-        else:
-            # Aggiunge eventuali chiavi mancanti (upgrade versione)
-            try:
-                with open(_PATH, "r", encoding="utf-8") as f:
-                    esistente = json.load(f)
-                default = _default()
-                aggiornato = _merge(default, esistente)
-                if aggiornato != esistente:
-                    _scrivi_raw(aggiornato)
-                    print(f"[RUNTIME] runtime.json aggiornato con nuove chiavi")
-            except Exception as e:
-                print(f"[RUNTIME] WARN: errore lettura runtime.json, uso default: {e}")
+            print(f"[RUNTIME] runtime.json creato → {_PATH}")
+            return
+
+        try:
+            with open(_PATH, "r", encoding="utf-8") as f:
+                esistente = json.load(f)
+        except Exception as e:
+            print(f"[RUNTIME] WARN: errore lettura, ricreo da zero: {e}")
+            _scrivi_raw(_default())
+            return
+
+        # --- Migrazione struttura vecchia ---
+        if "istanze_bs" in esistente or "istanze_mumu" in esistente:
+            print("[RUNTIME] Struttura vecchia rilevata — migrazione a formato overrides...")
+            nuovo = _default()
+
+            # Conserva i globali esistenti
+            for k, v in esistente.get("globali", {}).items():
+                if k in nuovo["globali"]:
+                    nuovo["globali"][k] = v
+
+            # Estrai overrides: solo delta rispetto ai default di config.py
+            overrides = {}
+            nomi_processati = set()
+            for chiave_lista in ("istanze_bs", "istanze_mumu"):
+                for ist in esistente.get(chiave_lista, []):
+                    nome = ist.get("nome", "")
+                    if not nome or nome in nomi_processati:
+                        continue
+                    nomi_processati.add(nome)
+                    delta = {}
+                    if not ist.get("abilitata", True):
+                        delta["abilitata"] = False
+                    ist_cfg = _trova_in_config(nome)
+                    if ist_cfg:
+                        cfg_truppe      = ist_cfg[3] if len(ist_cfg) > 3 else 12000
+                        cfg_max_squadre = ist_cfg[4] if len(ist_cfg) > 4 else 4
+                        if ist.get("truppe") not in (None, cfg_truppe):
+                            delta["truppe"] = ist["truppe"]
+                        if ist.get("max_squadre") not in (None, cfg_max_squadre):
+                            delta["max_squadre"] = ist["max_squadre"]
+                    if delta:
+                        overrides[nome] = delta
+
+            nuovo["overrides"] = overrides
+            _scrivi_raw(nuovo)
+            nomi = list(overrides.keys())
+            print(f"[RUNTIME] Migrazione completata. Overrides: {nomi if nomi else 'nessuno'}")
+            return
+
+        # --- Struttura nuova: aggiungi chiavi globali mancanti ---
+        default = _default()
+        aggiornato = False
+        for k, v in default["globali"].items():
+            if k not in esistente.get("globali", {}):
+                esistente.setdefault("globali", {})[k] = v
+                aggiornato = True
+        if "overrides" not in esistente:
+            esistente["overrides"] = {}
+            aggiornato = True
+        if aggiornato:
+            _scrivi_raw(esistente)
+            print("[RUNTIME] runtime.json aggiornato con nuove chiavi")
 
 
-def _merge(default: dict, esistente: dict) -> dict:
-    """Merge ricorsivo: mantiene i valori esistenti, aggiunge chiavi mancanti dal default."""
-    result = dict(default)
-    for k, v in esistente.items():
-        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
-            result[k] = _merge(result[k], v)
-        else:
-            result[k] = v
-    return result
+def _trova_in_config(nome: str) -> list:
+    """Cerca istanza per nome in config.ISTANZE e config.ISTANZE_MUMU."""
+    for lst in (getattr(config, "ISTANZE", []), getattr(config, "ISTANZE_MUMU", [])):
+        for ist in lst:
+            if ist[0] == nome:
+                return ist
+    return None
 
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # Carica runtime.json
-# ------------------------------------------------------------------------------
+# ==============================================================================
 def carica() -> dict:
-    """
-    Legge runtime.json e ritorna il dict.
-    In caso di errore ritorna il default (non blocca il ciclo).
-    """
     with _lock:
         try:
             with open(_PATH, "r", encoding="utf-8") as f:
@@ -132,24 +176,17 @@ def carica() -> dict:
             return _default()
 
 
-# ------------------------------------------------------------------------------
-# Applica parametri runtime a config.* in memoria
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# Applica parametri globali a config.* in memoria
+# ==============================================================================
 def applica(rt: dict):
-    """
-    Sovrascrive i parametri di config.* in memoria con i valori di runtime.json.
-    Chiamare all'inizio di ogni ciclo in main.py.
-    Non tocca le coordinate ADB né i percorsi — quelli rimangono da config.py.
-    """
+    """Sovrascrive config.* in memoria con i valori di runtime.json globali."""
     g = rt.get("globali", {})
 
-    # Parametri ciclo
     if "ISTANZE_BLOCCO" in g:
         config.ISTANZE_BLOCCO = int(g["ISTANZE_BLOCCO"])
     if "WAIT_MINUTI" in g:
         config.WAIT_MINUTI = int(g["WAIT_MINUTI"])
-
-    # Rifornimento
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
     if "RIFORNIMENTO_SOGLIA_M" in g:
@@ -157,12 +194,10 @@ def applica(rt: dict):
     if "RIFORNIMENTO_SOGLIA_PETROLIO_M" in g:
         config.RIFORNIMENTO_SOGLIA_PETROLIO_M = float(g["RIFORNIMENTO_SOGLIA_PETROLIO_M"])
 
-    # Allocation ratio — aggiorna il modulo allocation direttamente
     if "ALLOCATION_RATIO" in g:
         try:
             import allocation
-            ratio = g["ALLOCATION_RATIO"]
-            # Normalizza a 1.0 per sicurezza
+            ratio  = g["ALLOCATION_RATIO"]
             totale = sum(ratio.values())
             if totale > 0:
                 allocation.RATIO_TARGET = {k: v / totale for k, v in ratio.items()}
@@ -170,49 +205,57 @@ def applica(rt: dict):
             print(f"[RUNTIME] WARN applica ALLOCATION_RATIO: {e}")
 
 
-# ------------------------------------------------------------------------------
-# Costruisce lista istanze attive nel formato atteso da main.py
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# Lista istanze attive — SEMPRE fresca da config.py + overrides
+# ==============================================================================
 def istanze_attive(rt: dict, emulatore: str) -> list:
     """
-    Ritorna la lista di istanze abilitate nel formato lista usato da main.py:
-      BS:   [nome, interno, porta, truppe, max_squadre, layout]
-      MuMu: [nome, indice,  porta, truppe, max_squadre, layout]
+    Legge le istanze FRESH da config.py (mai dal json),
+    applica gli overrides e ritorna la lista filtrata.
 
+    Formato elemento: [nome, interno/indice, porta, truppe, max_squadre, layout]
     emulatore: "BlueStacks" | "MuMuPlayer 12"
     """
-    chiave = "istanze_bs" if "BlueStacks" in emulatore else "istanze_mumu"
-    lista  = rt.get(chiave, [])
+    if "BlueStacks" in emulatore:
+        lista_config = getattr(config, "ISTANZE", [])
+    else:
+        lista_config = getattr(config, "ISTANZE_MUMU", [])
 
+    overrides = rt.get("overrides", {})
     risultato = []
-    for ist in lista:
-        if not ist.get("abilitata", True):
+
+    for ist in lista_config:
+        nome = ist[0]
+        ovr  = overrides.get(nome, {})
+
+        # Istanza disabilitata via override
+        if not ovr.get("abilitata", True):
             continue
-        nome        = ist.get("nome", "")
-        truppe      = int(ist.get("truppe", 12000))
-        max_squadre = int(ist.get("max_squadre", 4))
-        layout      = int(ist.get("layout", 1))
+
+        # Valori base da config.py
+        truppe      = ist[3] if len(ist) > 3 else config.TRUPPE_RACCOLTA
+        max_squadre = ist[4] if len(ist) > 4 else 4
+        layout      = ist[5] if len(ist) > 5 else 1
+        lingua      = ist[6] if len(ist) > 6 else "it"
+
+        # Applica overrides numerici
+        if "truppe"      in ovr: truppe      = int(ovr["truppe"])
+        if "max_squadre" in ovr: max_squadre = int(ovr["max_squadre"])
+        if "layout"      in ovr: layout      = int(ovr["layout"])
+        if "lingua"      in ovr: lingua      = str(ovr["lingua"])
 
         if "BlueStacks" in emulatore:
-            interno = ist.get("interno", "")
-            porta   = str(ist.get("porta", ""))
-            risultato.append([nome, interno, porta, truppe, max_squadre, layout])
+            risultato.append([nome, str(ist[1]), str(ist[2]), truppe, max_squadre, layout, lingua])
         else:
-            indice = str(ist.get("indice", "0"))
-            porta  = int(ist.get("porta", 16384))
-            risultato.append([nome, indice, porta, truppe, max_squadre, layout])
+            risultato.append([nome, str(ist[1]), int(ist[2]), truppe, max_squadre, layout, lingua])
 
     return risultato
 
 
-# ------------------------------------------------------------------------------
-# Salva runtime.json (chiamato da dashboard_server via POST)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# Salva / utility
+# ==============================================================================
 def salva(dati: dict) -> bool:
-    """
-    Scrive runtime.json in modo atomico.
-    Ritorna True se ok, False se errore.
-    """
     with _lock:
         return _scrivi_raw(dati)
 
@@ -229,8 +272,5 @@ def _scrivi_raw(dati: dict) -> bool:
         return False
 
 
-# ------------------------------------------------------------------------------
-# Legge solo i parametri globali (per dashboard senza caricare tutto)
-# ------------------------------------------------------------------------------
 def leggi_globali() -> dict:
     return carica().get("globali", {})

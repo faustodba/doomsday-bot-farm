@@ -7,7 +7,7 @@
 #    in un pool controllato da un Semaphore(ISTANZE_BLOCCO)
 #  - Ogni istanza acquisisce uno slot all'avvio e lo rilascia appena termina
 #  - Non appena si libera uno slot, l'istanza successiva in coda parte subito
-#  - Ogni istanza chiude SOLO la propria finestra dell'emulatore (chiusura selettiva)
+#  - Ogni istanza chiude SOLO la propria finestra BlueStacks (chiusura selettiva)
 #  - L'attesa iniziale DELAY_CARICA_INIZ è per-istanza (non blocca le altre)
 #
 #  Uso: python main.py
@@ -55,13 +55,13 @@ def _scegli_emulatore():
     if scelta == "2":
         import mumu as _emu
         istanze_base = config.ISTANZE_MUMU
+        nome_emu = "MuMuPlayer 12"
         config.ADB_EXE = config.MUMU_ADB
     else:
         import bluestacks as _emu
         istanze_base = config.ISTANZE
+        nome_emu = "BlueStacks"
         config.ADB_EXE = config.BS_ADB
-
-    nome_emu = _emu.NOME
 
     # Filtro istanze se passato da launcher (--istanze FAU_00,FAU_01,...)
     if args.istanze:
@@ -77,8 +77,10 @@ def _scegli_emulatore():
 
 emulatore, ISTANZE_ATTIVE, NOME_EMULATORE = _scegli_emulatore()
 
-# Verifica e avvio automatico del manager dell'emulatore selezionato
-emulatore.assicura_avvio_manager(logger=log.logger)
+# Controllo e avvio automatico BlueStacks Multi Instance Manager (solo BS)
+if "BlueStacks" in NOME_EMULATORE:
+    import bluestacks as _bs_check
+    _bs_check.assicura_multi_instance_manager(logger=log.logger)
 
 # Inizializza runtime.json da config.py se non esiste ancora
 runtime.inizializza_se_mancante()
@@ -161,7 +163,7 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
                     _pids_snapshot.add(pid)
 
             # Attesa iniziale caricamento (per-istanza, non blocca le altre)
-            log.logger(NOME_EMULATORE, f"[{nome}] Attesa iniziale {config.DELAY_CARICA_INIZ}s caricamento...")
+            log.logger("BS", f"[{nome}] Attesa iniziale {config.DELAY_CARICA_INIZ}s caricamento...")
             time.sleep(config.DELAY_CARICA_INIZ)
 
             # Verifica caricamento + raccolta + chiusura immediata

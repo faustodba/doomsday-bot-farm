@@ -21,16 +21,16 @@ L'autore non è affiliato con IGG (International Game Group) né con i produttor
 
 Il bot gestisce in modo automatico le operazioni ripetitive del gioco su più istanze in parallelo:
 
-- Raccolta messaggi (tab Alleanza e Sistema) — schedulata ogni 12 ore per istanza
-- Raccolta ricompense Alleanza (Negozio + Attività) — schedulata ogni 12 ore per istanza
-- Invio rifornimenti con gestione quota giornaliera e delta reale OCR pre/post invio
+- Raccolta messaggi (tab Alleanza e Sistema) — **schedulata ogni 12 ore per istanza**
+- Raccolta ricompense Alleanza (Negozio + Attività) — **schedulata ogni 12 ore per istanza**
+- Invio rifornimenti con gestione quota giornaliera e **delta reale OCR pre/post invio**
 - Ricerca e invio raccoglitori su nodi risorse (campo/segheria/acciaieria/raffineria)
-- Sistema decisionale adattivo basato sul gap deposito vs target per allocare gli slot
-- Verifica territorio alleanza prima di inviare raccoglitori (pixel verde "+30%")
+- **Sistema decisionale adattivo** basato sul gap deposito vs target per allocare gli slot
+- **Verifica territorio alleanza** prima di inviare raccoglitori (pixel verde "+30%")
 - Gestione blacklist nodi con attesa dinamica basata su ETA marcia OCR
-- OCR completo deposito: pomodoro, legno, acciaio, petrolio, diamanti
-- Dashboard web con dati storici persistenti tra riavvii
-- Configurazione runtime modificabile senza riavviare il bot
+- **OCR completo deposito:** pomodoro, legno, acciaio, petrolio, diamanti
+- **Dashboard web** con dati storici persistenti tra riavvii
+- **Configurazione runtime** modificabile senza riavviare il bot
 
 ---
 
@@ -39,9 +39,7 @@ Il bot gestisce in modo automatico le operazioni ripetitive del gioco su più is
 | Emulatore | Versione | Note |
 |-----------|----------|------|
 | BlueStacks | 5+ | Avviato e stoppato per ogni ciclo |
-| MuMuPlayer | 12 | Supporto completo con MuMuManager |
-
-Entrambi gli emulatori condividono la stessa interfaccia — il bot è completamente intercambiabile senza modifiche al codice.
+| MuMuPlayer | 12 | Integrato con Provider Pattern |
 
 ---
 
@@ -51,23 +49,22 @@ Entrambi gli emulatori condividono la stessa interfaccia — il bot è completam
 main.py
 │
 ├── runtime.py          ← rilettura config JSON ogni ciclo (no riavvio)
-├── coords.py           ← UICoords per-istanza (layout + lingua)
 │
 ├── Pool con Semaphore (max N istanze parallele)
 │   └── worker per istanza
-│       ├── emulatore.avvia_blocco()        → bluestacks.py | mumu.py
-│       ├── emulatore_base.attendi_e_raccogli_istanza()
+│       ├── avvia_blocco()         → emulatore (BS/MuMu)
+│       ├── attendi_e_raccogli_istanza() → emulatore_base
 │       │   ├── polling popup (3 conferme)
-│       │   └── raccolta_istanza()          → raccolta.py
-│       │       ├── messaggi.py             ← skip se <12h
-│       │       ├── alleanza.py             ← skip se <12h
-│       │       ├── rifornimento.py         ← HOME, IT/EN, delta OCR
+│       │   └── raccolta_istanza() → raccolta.py
+│       │       ├── messaggi.py    ← skip se <12h dall'ultima
+│       │       ├── alleanza.py    ← skip se <12h dall'ultima
+│       │       ├── rifornimento.py   ← HOME, delta reale OCR pre/post VAI
 │       │       └── loop invio squadre
-│       │           ├── allocation.py       ← sequenza adattiva gap-based
+│       │           ├── allocation.py  ← sequenza adattiva gap-based
 │       │           ├── verifica territorio (pixel verde)
 │       │           └── blacklist nodi (RESERVED/COMMITTED/ETA dinamica)
-│       └── emulatore.chiudi_istanza()
-└── emulatore.cleanup_istanze_appese()
+│       └── chiudi_istanza()
+└── cleanup_istanze_appese()
 ```
 
 ---
@@ -77,13 +74,12 @@ main.py
 | Modulo | Descrizione |
 |--------|-------------|
 | `main.py` | Entry point, pool con semaforo, loop principale |
-| `coords.py` | Dataclass UICoords per-istanza — coordinate UI risolte per layout e lingua |
 | `raccolta.py` | Flusso raccolta risorse per singola istanza |
 | `allocation.py` | Sistema decisionale allocazione slot (gap proporzionale) |
-| `runtime.py` | Configurazione runtime via JSON — architettura overrides |
+| `runtime.py` | Configurazione modificabile a runtime via JSON |
 | `alleanza.py` | Automazione menu Alleanza/Dono — schedulata |
 | `messaggi.py` | Raccolta messaggi in-game — schedulata |
-| `rifornimento.py` | Invio rifornimenti — supporto IT/EN, delta OCR reale |
+| `rifornimento.py` | Invio rifornimenti con delta OCR reale e soglie per risorsa |
 | `scheduler.py` | Schedulazione task periodici su file stato |
 | `bluestacks.py` | Gestione ciclo vita BlueStacks |
 | `mumu.py` | Gestione ciclo vita MuMuPlayer 12 |
@@ -91,7 +87,7 @@ main.py
 | `adb.py` | Comandi ADB (tap, screenshot, keyevent) |
 | `ocr.py` | OCR Tesseract — risorse complete + ETA marcia |
 | `stato.py` | Rilevamento stato gioco |
-| `config.py` | Configurazione centralizzata (8 sezioni) |
+| `config.py` | Configurazione centralizzata |
 | `timing.py` | EWMA adaptive timing |
 | `log.py` | Logging centralizzato |
 | `debug.py` | Screenshot diagnostici |
@@ -99,7 +95,7 @@ main.py
 | `report.py` | Report HTML a fine ciclo |
 | `launcher.py` | GUI tkinter (in sviluppo) |
 | `dashboard.html` | Dashboard web real-time |
-| `dashboard_server.py` | HTTP server porta 8080 |
+| `dashboard_server.py` | HTTP server porta 8080 + endpoint POST runtime |
 
 ---
 
@@ -111,7 +107,7 @@ main.py
 - BlueStacks 5+ e/o MuMuPlayer 12
 
 ```bash
-pip install pillow pytesseract opencv-python numpy
+pip install pillow pytesseract opencv-python
 ```
 
 ---
@@ -119,37 +115,38 @@ pip install pillow pytesseract opencv-python numpy
 ## 🚀 Avvio
 
 ```bash
-cd C:\Bot-farm
+# Entra nella cartella dove hai clonato/scaricato il bot
+cd <cartella-installazione>
 
-# Avvia il bot (seleziona emulatore al prompt)
-python main.py
+# Avvio bot
+python main.py --emulatore 1
 
-# Oppure direttamente
-python main.py --emulatore 1   # BlueStacks
-python main.py --emulatore 2   # MuMuPlayer 12
-
-# Dashboard separata (senza bot)
+# Dashboard (finestra separata)
 python dashboard_server.py
 # Aprire: http://localhost:8080/dashboard.html
 ```
 
 ---
 
-## 🌐 Dashboard
+## 📊 Sistema decisionale allocazione slot
 
-La dashboard web si avvia automaticamente con il bot sulla porta 8080.
+Ad ogni ciclo il bot calcola il **gap** tra la percentuale attuale di ogni risorsa nel deposito e il target prefissato:
 
 ```
-http://localhost:8080/dashboard.html
+RATIO_TARGET:
+  pomodoro  →  37.5%   (nodo lv6: 1.200.000)
+  legno     →  37.5%   (nodo lv6: 1.200.000)
+  petrolio  →  18.75%  (nodo lv6:   600.000)
+  acciaio   →   6.25%  (nodo lv6:   240.000)
 ```
 
-### Funzionalità
-- Stato real-time di ogni istanza (running/avvio/done/errori)
-- Risorse deposito aggregate e per istanza
-- Produzione inter-ciclo e inviato a destinatario
-- Storico ultimi 10 cicli
-- **Configurazione runtime** senza riavvio: parametri globali + override per istanza
-- Selezione BS/MuMu per visualizzare le istanze corrette
+Gli slot disponibili vengono assegnati ai tipi con gap positivo maggiore. Configurabile a runtime dalla dashboard senza riavviare il bot.
+
+---
+
+## 🗺️ Verifica territorio alleanza
+
+Prima di inviare un raccoglitore, il bot verifica che il nodo sia **nel territorio dell'alleanza** controllando la presenza del buff "+30% velocità raccolta" (pixel verdi nella zona del popup). I nodi fuori territorio vengono scartati e il bot passa al tipo successivo.
 
 ---
 
@@ -157,69 +154,41 @@ http://localhost:8080/dashboard.html
 
 Modifica i parametri **senza riavviare il bot** tramite la dashboard web o editando `runtime.json`:
 
-```json
-{
-  "globali": {
-    "ISTANZE_BLOCCO": 1,
-    "WAIT_MINUTI": 10,
-    "RIFORNIMENTO_ABILITATO": true,
-    "RIFORNIMENTO_SOGLIA_M": 5.0,
-    "RIFORNIMENTO_SOGLIA_PETROLIO_M": 2.5,
-    "ALLOCATION_RATIO": {
-      "campo": 0.375, "segheria": 0.375,
-      "petrolio": 0.1875, "acciaio": 0.0625
-    }
-  },
-  "overrides": {
-    "FAU_09": { "abilitata": false }
-  }
-}
-```
-
-Le istanze vengono sempre lette da `config.py` — `overrides` contiene solo i delta.
+| Parametro | Descrizione |
+|-----------|-------------|
+| `ISTANZE_BLOCCO` | Istanze in parallelo |
+| `WAIT_MINUTI` | Attesa tra cicli |
+| `RIFORNIMENTO_ABILITATO` | Abilita/disabilita invio risorse |
+| `RIFORNIMENTO_SOGLIA_M` | Soglia minima invio pomodoro/legno |
+| `RIFORNIMENTO_SOGLIA_PETROLIO_M` | Soglia minima invio petrolio |
+| `ALLOCATION_RATIO` | Pesi allocazione slot per risorsa |
+| `istanze_bs/mumu` | Abilitazione, truppe, max squadre per istanza |
 
 ---
 
-## 🔤 Supporto multilingua
+## 📈 Calcolo produzione
 
-Le istanze MuMuPlayer supportano giochi in italiano e inglese:
-
-```python
-ISTANZE_MUMU = [
-    ["FAU_08", "8", 16384, 12000, 4, 1, "en"],  # inglese
-    ["FAU_09", "9", 16672, 12000, 4, 2, "it"],  # italiano
-]
 ```
-
-Il campo `lingua` seleziona automaticamente il template corretto per il riconoscimento del pulsante di rifornimento.
+produzione_ciclo_N = (deposito_inizio_N+1 - deposito_inizio_N) + inviato_N
+```
+Disponibile dal 2° ciclo in poi. Visibile nella dashboard per istanza e aggregato nello storico.
 
 ---
 
-## 📊 Sistema decisionale allocazione slot
+## 📁 File di output runtime
 
-```
-RATIO_TARGET:
-  pomodoro  →  37.5%
-  legno     →  37.5%
-  petrolio  →  18.75%
-  acciaio   →   6.25%
-```
-
-Gli slot disponibili vengono assegnati ai tipi con gap positivo maggiore rispetto al deposito corrente.
-
----
-
-## 📁 File generati a runtime
+Generati automaticamente nella cartella di installazione:
 
 ```
 bot.log
 status.json
-runtime.json
+runtime.json                     ← configurazione runtime
 timing.json
 rifornimento_stato_{nome}_{porta}.json
 schedule_stato_{nome}_{porta}.json
-debug\ciclo_NNN\*.png
-report_ciclo_NNN.html
+debug\ciclo_NNN\
+    report_ciclo_NNN.html
+    *.png
 ```
 
 ---
@@ -228,7 +197,7 @@ report_ciclo_NNN.html
 
 ```
 ├── *.py              ← moduli principali
-├── templates\        ← template matching (avatar, pulsanti IT/EN, badge, frecce)
+├── templates\        ← immagini template matching (avatar, pulsanti)
 ├── runtime.json      ← config runtime (generato al primo avvio)
 ├── CONTEXT.md        ← contesto sessioni Claude
 ├── LICENSE           ← MIT License
@@ -252,8 +221,7 @@ report_ciclo_NNN.html
 | V5.13 | Blacklist RESERVED/COMMITTED |
 | V5.13.2 | ETA marcia OCR, attesa dinamica |
 | V5.14 | OCR completo deposito, produzione inter-ciclo, schedulazione 12h, dashboard storico+diamanti+inviato |
-| V5.15 | allocation.py gap decisionale, 4 tipi nodo + verifica territorio, soglie rifornimento, runtime.json live |
-| V5.16 | Contratto BS/MuMu unificato, coords.py UICoords, lingua per istanza IT/EN, template EN, runtime overrides, dashboard /config_istanze.json |
+| V5.15 | allocation.py (gap decisionale 4 risorse), 4 tipi nodo + verifica territorio alleanza, soglie rifornimento per risorsa, runtime.json configurazione live, pannello Runtime in dashboard, repo pulito su faustodba/doomsday-bot-farm |
 
 ---
 

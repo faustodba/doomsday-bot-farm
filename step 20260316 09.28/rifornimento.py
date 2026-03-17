@@ -779,74 +779,20 @@ def _verifica_nome_destinatario(screen_path: str, nome_atteso: str) -> bool:
 # ------------------------------------------------------------------------------
 # Cerca pulsante "Risorse di approvvigionamento" via template matching
 # ------------------------------------------------------------------------------
-def _trova_pulsante_risorse(porta: str, logger=None, nome: str = "",
-                            btn_template: str = None):
+def _trova_pulsante_risorse(porta: str, logger=None, nome: str = ""):
     def log(msg):
         if logger: logger(nome, f"[RIF] {msg}")
 
-    if btn_template:
-        template_path = btn_template
-    else:
-        template_path = getattr(config, "RIFORNIMENTO_BTN_TEMPLATE",
-                                "templates/btn_risorse_approv.png")
-
-    lingua = "en" if (btn_template and "supply" in btn_template.lower()) else "it"
-    import os as _os
-    log(f"[DIAG] lingua={lingua} template={template_path} esiste={_os.path.exists(str(template_path))}")
-
+    template_path = getattr(config, "RIFORNIMENTO_BTN_TEMPLATE",
+                            "templates/btn_risorse_approv.png")
     screen = adb.screenshot(porta)
     if not screen:
         return None
 
-    # --- Strategia 1: template matching standard (IT e EN con template univoco) ---
     coord = _trova_template(screen, template_path, soglia=BTN_RISORSE_SOGLIA)
     if coord:
         log(f"Pulsante Risorse trovato a {coord}")
         return coord
-
-    # --- Strategia 2 (solo EN): il template EN è graficamente simile a "Info"
-    #     quindi possono esserci più match. Il popup ha layout fisso 2x2:
-    #       [Chat]          [Info]
-    #       [Reinforcement] [Resource Supply]
-    #     Resource Supply è SEMPRE il pulsante con Y massima tra i match destra.
-    if lingua == "en":
-        try:
-            screen_cv = cv2.imread(screen)
-            tmpl_cv   = cv2.imread(template_path)
-            if screen_cv is None or tmpl_cv is None:
-                log("Pulsante Risorse non trovato via template matching")
-                return None
-
-            result = cv2.matchTemplate(screen_cv, tmpl_cv, cv2.TM_CCOEFF_NORMED)
-            th, tw = tmpl_cv.shape[:2]
-
-            # Raccogli tutti i match sopra soglia alta, deduplica per cluster 20px
-            locations = np.where(result >= 0.85)
-            candidati = []
-            for pt in zip(*locations[::-1]):
-                cx = int(pt[0] + tw // 2)
-                cy = int(pt[1] + th // 2)
-                score = float(result[pt[1], pt[0]])
-                # Deduplica: ignora se già c'è un match entro 20px
-                if not any(abs(cx-dx) < 20 and abs(cy-dy) < 20 for _, dx, dy in candidati):
-                    candidati.append((score, cx, cy))
-
-            if not candidati:
-                log("Pulsante Risorse non trovato via template matching")
-                return None
-
-            # Resource Supply = pulsante con Y massima (più in basso)
-            # nella metà destra dello schermo (x > 480)
-            destra = [(s, cx, cy) for s, cx, cy in candidati if cx > 480]
-            if not destra:
-                destra = candidati  # fallback: usa tutti
-
-            best = max(destra, key=lambda t: t[2])  # max Y
-            log(f"Pulsante Risorse (bottom-right EN) trovato a ({best[1]},{best[2]}) score={best[0]:.3f}")
-            return (best[1], best[2])
-
-        except Exception as e:
-            log(f"Strategia EN fallita: {e}")
 
     log("Pulsante Risorse non trovato via template matching")
     return None
@@ -856,9 +802,7 @@ def _trova_pulsante_risorse(porta: str, logger=None, nome: str = "",
 # Naviga alla maschera "Risorse di Approvvigionamento"
 # Usa la nuova navigazione avanzata con toggle + scroll
 # ------------------------------------------------------------------------------
-def _naviga_a_maschera(porta: str, logger=None, nome: str = "",
-                       coord_alleanza: tuple = None,
-                       btn_template: str = None) -> bool:
+def _naviga_a_maschera(porta: str, logger=None, nome: str = "") -> bool:
     def log(msg):
         if logger: logger(nome, f"[RIF] {msg}")
 
@@ -870,13 +814,12 @@ def _naviga_a_maschera(porta: str, logger=None, nome: str = "",
     nome_dest = getattr(config, "DOOMS_ACCOUNT", "")
 
     # 1. Apri Alleanza → Membri
-    _coord_all = coord_alleanza if coord_alleanza else COORD_ALLEANZA_BTN
     log("Tap Alleanza")
-    adb.tap(porta, _coord_all, delay_ms=1500)
+    adb.tap(porta, COORD_ALLEANZA_BTN, delay_ms=1500)
     log("Tap Membri")
     adb.tap(porta, COORD_MEMBRI, delay_ms=1500)
 
-    # 2. Apri tutti i toggle R4/R3/R2/R1 — cerca avatar in parallelo
+    # 2. Apri tutti i toggle R4/R3/R2/R1 — cerca avatar in parallelo durante lo scroll
     coord_tap, _ = _apri_tutti_toggle(porta, logger, nome, template_avatar)
 
     # 3. Se non trovato durante i toggle, cerca con scroll dedicato
@@ -890,10 +833,10 @@ def _naviga_a_maschera(porta: str, logger=None, nome: str = "",
     log(f"Tap membro a {coord_tap}")
     adb.tap(porta, coord_tap, delay_ms=1500)
 
-    # 5. Trova pulsante rifornimento (template lingua-specifico)
+    # 5. Trova pulsante "Risorse di approvvigionamento"
     btn_coord = None
     for tentativo in range(3):
-        btn_coord = _trova_pulsante_risorse(porta, logger, nome, btn_template=btn_template)
+        btn_coord = _trova_pulsante_risorse(porta, logger, nome)
         if btn_coord:
             break
         time.sleep(0.8)
@@ -903,7 +846,7 @@ def _naviga_a_maschera(porta: str, logger=None, nome: str = "",
         adb.keyevent(porta, "KEYCODE_BACK")
         return False
 
-    # 6. Tap pulsante → apre maschera
+    # 6. Tap "Risorse di approvvigionamento" → apre maschera
     log(f"Tap Risorse di approvvigionamento a {btn_coord}")
     adb.tap(porta, btn_coord, delay_ms=2000)
     return True
@@ -1004,9 +947,7 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
 def esegui_rifornimento(porta: str, nome: str,
                         pomodoro_m: float = -1, legno_m: float = -1,
                         acciaio_m: float = -1, petrolio_m: float = -1,
-                        logger=None, ciclo: int = 0,
-                        coord_alleanza: tuple = None,
-                        btn_template: str = None) -> int:
+                        logger=None, ciclo: int = 0) -> int:
     """
     Esegue rifornimento risorse al rifugio alleato configurato.
     Ritorna numero di spedizioni effettuate.
@@ -1143,9 +1084,7 @@ def esegui_rifornimento(porta: str, nome: str,
         risorse_pre = risorse_reali
 
         # 4. Naviga alla maschera
-        if not _naviga_a_maschera(porta, logger, nome,
-                                  coord_alleanza=coord_alleanza,
-                                  btn_template=btn_template):
+        if not _naviga_a_maschera(porta, logger, nome):
             log("Navigazione fallita - interruzione rifornimento")
             for _ in range(5):
                 adb.keyevent(porta, "KEYCODE_BACK")

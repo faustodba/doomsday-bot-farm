@@ -1,22 +1,7 @@
 # ==============================================================================
 #  DOOMSDAY BOT V5 - bluestacks.py
 #  Avvio parallelo, polling ADB, caricamento e chiusura istanze BlueStacks
-#
-#  CONTRATTO INTERFACCIA (comune con mumu.py):
-#    NOME                              → str identificativo emulatore
-#    assicura_avvio_manager(logger)    → bool
-#    avvia_istanza(ist, logger)        → bool
-#    avvia_blocco(blocco_ist, logger)  → list
-#    attendi_e_raccogli_istanza(...)   → void
-#    chiudi_istanza(ist, logger)       → void
-#    chiudi_blocco(blocco_ist, logger) → void
-#    cleanup_istanze_appese(pids, log) → void
-#    _pids_istanze                     → dict
-#    _pids_lock                        → Lock
 # ==============================================================================
-
-# Identificatore emulatore — usato da main.py per log e selezione
-NOME = "BlueStacks"
 
 import subprocess
 import threading
@@ -54,7 +39,7 @@ def _mim_attivo() -> bool:
 # Se non è attivo viene avviato automaticamente e si attende l'inizializzazione.
 # Chiamare da main.py subito dopo la selezione emulatore BlueStacks.
 # ------------------------------------------------------------------------------
-def assicura_avvio_manager(logger=None) -> bool:
+def assicura_multi_instance_manager(logger=None) -> bool:
     """
     Verifica che BlueStacks Multi Instance Manager sia in esecuzione.
     Se non è attivo lo avvia automaticamente e attende l'inizializzazione.
@@ -91,9 +76,6 @@ def assicura_avvio_manager(logger=None) -> bool:
     except Exception as e:
         log(f"ERRORE avvio MIM: {e}")
         return False
-
-# Alias retrocompatibilità (usato da versioni precedenti di main.py)
-assicura_multi_instance_manager = assicura_avvio_manager
 
 # ------------------------------------------------------------------------------
 # Hide finestra HD-Player per PID (pywin32)

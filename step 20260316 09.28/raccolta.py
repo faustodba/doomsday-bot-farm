@@ -206,24 +206,20 @@ def _nodo_in_territorio(screen_path: str) -> bool:
 # Raccolta: ricerca nodo + OCR coordinate
 # ------------------------------------------------------------------------------
 
-def _cerca_nodo(porta, tipo, coords=None):
+def _cerca_nodo(porta, tipo):
     """Esegue LENTE → selezione tipo × 2 → CERCA.
     Tipi supportati: campo, segheria, acciaio, petrolio.
-    coords: UICoords — se None usa config direttamente (retrocompatibilità).
     """
-    if coords is not None:
-        tap_icona, tap_cerca = coords.per_tipo(tipo)
-        adb.tap(porta, coords.lente)
-    else:
-        _TAP_MAPPA = {
-            "campo":    (config.TAP_CAMPO,       config.TAP_CERCA_CAMPO),
-            "segheria": (config.TAP_SEGHERIA,    config.TAP_CERCA_SEGHERIA),
-            "acciaio":  (config.TAP_ACCIAIERIA,  config.TAP_CERCA_ACCIAIERIA),
-            "petrolio": (config.TAP_RAFFINERIA,  config.TAP_CERCA_RAFFINERIA),
-        }
-        tap_icona, tap_cerca = _TAP_MAPPA.get(tipo, _TAP_MAPPA["campo"])
-        adb.tap(porta, config.TAP_LENTE)
+    # Mappa tipo → (tap_icona, tap_cerca)
+    _TAP_MAPPA = {
+        "campo":    (config.TAP_CAMPO,       config.TAP_CERCA_CAMPO),
+        "segheria": (config.TAP_SEGHERIA,    config.TAP_CERCA_SEGHERIA),
+        "acciaio":  (config.TAP_ACCIAIERIA,  config.TAP_CERCA_ACCIAIERIA),
+        "petrolio": (config.TAP_RAFFINERIA,  config.TAP_CERCA_RAFFINERIA),
+    }
+    tap_icona, tap_cerca = _TAP_MAPPA.get(tipo, _TAP_MAPPA["campo"])
 
+    adb.tap(porta, config.TAP_LENTE)
     adb.tap(porta, tap_icona)
     adb.tap(porta, tap_icona)
     time.sleep(0.5)
@@ -279,7 +275,7 @@ def _leggi_attive_con_retry(porta, nome, logger=None, n_letture=3, retry=3, slee
 # Sequenza UI: RACCOGLI → SQUADRA → (truppe) → MARCIA
 # ------------------------------------------------------------------------------
 
-def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coords=None):
+def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None):
     """Esegue la sequenza UI: RACCOGLI → SQUADRA → (truppe) → MARCIA.
 
     Ritorna (ok, eta_s):
@@ -292,22 +288,15 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 
     eta_s = None
 
-    _raccogli    = coords.raccogli    if coords else config.TAP_RACCOGLI
-    _squadra     = coords.squadra     if coords else config.TAP_SQUADRA
-    _marcia      = coords.marcia      if coords else config.TAP_MARCIA
-    _cancella    = coords.cancella    if coords else config.TAP_CANCELLA
-    _campo_testo = coords.campo_testo if coords else config.TAP_CAMPO_TESTO
-    _ok_tastiera = coords.ok_tastiera if coords else config.TAP_OK_TASTIERA
-
     # 1) RACCOGLI
-    adb.tap(porta, _raccogli)
+    adb.tap(porta, config.TAP_RACCOGLI)
     time.sleep(0.5)
 
     # 2) SQUADRA — confronto hash prima/dopo per rilevare maschera non aperta
     screen_before_squadra = adb.screenshot(porta)
     before_hash = _md5_file(screen_before_squadra)
 
-    adb.tap(porta, _squadra)
+    adb.tap(porta, config.TAP_SQUADRA)
     time.sleep(1.4)
 
     screen_pre = adb.screenshot(porta)
@@ -330,11 +319,12 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 
     if before_hash and pre_hash and before_hash == pre_hash:
         log("SQUADRA: schermata invariata (maschera non aperta) - retry tap SQUADRA")
-        adb.tap(porta, _squadra)
+        adb.tap(porta, config.TAP_SQUADRA)
         time.sleep(1.8)
         screen_pre = adb.screenshot(porta)
         debug.salva_screen(screen_pre, nome, "pre_marcia_retry", squadra, tentativo)
 
+        # Secondo tentativo lettura ETA
         try:
             eta_s2, raw2 = ocr.leggi_eta_marcia(screen_pre)
             if eta_s2 is not None:
@@ -352,9 +342,9 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 
     # 3) Imposta truppe se richiesto
     if n_truppe and n_truppe > 0:
-        adb.tap(porta, _cancella)
+        adb.tap(porta, config.TAP_CANCELLA)
         time.sleep(0.4)
-        adb.tap(porta, _campo_testo)
+        adb.tap(porta, config.TAP_CAMPO_TESTO)
         time.sleep(0.4)
         adb.keyevent(porta, "KEYCODE_CTRL_A")
         time.sleep(0.15)
@@ -362,11 +352,11 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
         time.sleep(0.15)
         adb.input_text(porta, str(n_truppe))
         time.sleep(0.25)
-        adb.tap(porta, _ok_tastiera)
+        adb.tap(porta, config.TAP_OK_TASTIERA)
         time.sleep(0.25)
 
     # 4) MARCIA
-    adb.tap(porta, _marcia)
+    adb.tap(porta, config.TAP_MARCIA)
     time.sleep(0.8)
 
     # 5) Verifica schermata cambiata dopo MARCIA
@@ -375,7 +365,7 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 
     if pre_hash and post_hash and pre_hash == post_hash:
         log("MARCIA: schermata invariata (probabile maschera bloccata) - retry tap MARCIA")
-        adb.tap(porta, _marcia)
+        adb.tap(porta, config.TAP_MARCIA)
         time.sleep(1.0)
         screen_post2 = adb.screenshot(porta)
         post_hash2 = _md5_file(screen_post2)
@@ -391,15 +381,19 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 # ------------------------------------------------------------------------------
 
 def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
-                      logger=None, blacklist=None, blacklist_lock=None, coords=None):
-    """Ritorna (chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio)."""
+                      logger=None, blacklist=None, blacklist_lock=None):
+    """Ritorna (chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio).
+
+    fuori_territorio=True: nodo scartato perché fuori dal territorio alleanza.
+      → il caller deve riprovare con nuovo CERCA dello stesso tipo (NON bloccare il tipo).
+    nodo_bloccato=True con fuori_territorio=False: blacklist da navigazione.
+      → il caller può bloccare il tipo se non trova alternative.
+    """
     def log(msg):
         if logger:
             logger(nome, msg)
 
-    _nodo_coord = coords.nodo if coords else config.TAP_NODO
-
-    _cerca_nodo(porta, tipo, coords)
+    _cerca_nodo(porta, tipo)
     chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 1, logger)
 
     if chiave_nodo is None:
@@ -407,9 +401,9 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
         debug.salva_screen(screen_nodo, nome, "fase3_ocr_coord_fail", squadra, tentativo, "r1")
         adb.keyevent(porta, "KEYCODE_BACK")
         time.sleep(0.4)
-        adb.tap(porta, _nodo_coord)
+        adb.tap(porta, config.TAP_NODO)
         time.sleep(0.6)
-        ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger, coords)
+        ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger)
         return None, False, ok, eta_s, False
 
     if _blacklist_pulisci_e_verifica(blacklist, blacklist_lock, chiave_nodo):
@@ -417,10 +411,11 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
         debug.salva_screen(screen_nodo, nome, "fase3_blacklist", squadra, tentativo, f"{cx}_{cy}_r1")
 
         chiave_primo = chiave_nodo
-        _cerca_nodo(porta, tipo, coords)
+        _cerca_nodo(porta, tipo)
         chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 2, logger)
 
         if chiave_nodo == chiave_primo or chiave_nodo is None:
+            # Attesa dinamica: usa ETA reale del nodo se disponibile, altrimenti TTL fisso
             attesa = 3
             if _blacklist_get_state(blacklist, blacklist_lock, chiave_primo) == "COMMITTED":
                 eta_prev = _blacklist_get_eta(blacklist, blacklist_lock, chiave_primo)
@@ -434,7 +429,7 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
                     log(f"Attendo {attesa}s (ETA nodo non disponibile - TTL fisso)")
             time.sleep(attesa)
 
-            _cerca_nodo(porta, tipo, coords)
+            _cerca_nodo(porta, tipo)
             chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 3, logger)
 
             if chiave_nodo == chiave_primo or chiave_nodo is None:
@@ -451,17 +446,24 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
             return None, True, False, None, False
 
     log(f"[FASE4] Nodo ({cx},{cy}) libero - tap nodo")
-    adb.tap(porta, _nodo_coord)
+    adb.tap(porta, config.TAP_NODO)
     time.sleep(0.7)
 
     screen_popup = adb.screenshot(porta)
     debug.salva_screen(screen_popup, nome, "fase4_popup_raccogli", squadra, tentativo, f"{cx}_{cy}")
 
+    # --- Verifica territorio alleanza ---
+    # Il popup mostra la riga verde "+30% VEL di raccolta" SOLO se il nodo
+    # è nel territorio dell'alleanza. Fuori territorio la riga non compare.
+    # Se fuori territorio: BACK, nodo aggiunto alla blacklist COMMITTED per
+    # evitare che venga riproposto nel ciclo corrente, poi nuovo CERCA.
     if screen_popup and not _nodo_in_territorio(screen_popup):
         log(f"Nodo ({cx},{cy}) FUORI territorio alleanza — scarto e cerco altro")
         debug.salva_screen(screen_popup, nome, "fase4_fuori_territorio", squadra, tentativo, f"{cx}_{cy}")
         adb.keyevent(porta, "KEYCODE_BACK")
         time.sleep(0.4)
+        # Blacklist COMMITTED con TTL pieno: evita che lo stesso nodo venga
+        # riproposto nel ciclo, ma non lo blocca per sempre
         _blacklist_commit(blacklist, blacklist_lock, chiave_nodo, eta_s=None)
         log(f"Nodo ({cx},{cy}) aggiunto a blacklist (fuori territorio)")
         return chiave_nodo, True, False, None, True
@@ -470,7 +472,7 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
     log(f"Nodo ({cx},{cy}) prenotato in blacklist (RESERVED)")
 
     for t in range(1, config.MAX_TENTATIVI_RACCOLTA + 1):
-        ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, t, logger, coords)
+        ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, t, logger)
         if ok:
             return chiave_nodo, False, True, eta_s, False
 
@@ -493,10 +495,6 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
 
     n_truppe = truppe if truppe is not None else config.TRUPPE_RACCOLTA
 
-    # Costruisce coordinate UI per questa istanza (risolve layout barra)
-    from coords import UICoords
-    coords = UICoords.da_ist(ist) if ist is not None else UICoords.da_ist([nome, "", "", 0, 0, 1])
-
     log("Inizio raccolta risorse")
     _status.istanza_raccolta(nome)
 
@@ -512,8 +510,6 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
             porta, nome,
             logger=logger,
             ciclo=ciclo,
-            coord_alleanza=coords.alleanza,
-            btn_template=coords.btn_rifornimento_template,
         )
         if sped and sped > 0:
             log(f"Rifornimento: {sped} spedizione/i effettuata/e")
@@ -622,8 +618,7 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
 
         chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio = _tap_invia_squadra(
             porta, tipo, n_truppe, nome, squadra_n, 1, ciclo,
-            logger=logger, blacklist=blacklist, blacklist_lock=blacklist_lock,
-            coords=coords,
+            logger=logger, blacklist=blacklist, blacklist_lock=blacklist_lock
         )
 
         if nodo_bloccato:

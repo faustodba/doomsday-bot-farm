@@ -13,22 +13,7 @@
 #
 #  Processo per singola istanza: MuMuNxDevice.exe
 #  (MuMuNxMain.exe è solo il launcher GUI, non va killato per istanza)
-#
-#  CONTRATTO INTERFACCIA (comune con bluestacks.py):
-#    NOME                              → str identificativo emulatore
-#    assicura_avvio_manager(logger)    → bool
-#    avvia_istanza(ist, logger)        → bool
-#    avvia_blocco(blocco_ist, logger)  → list
-#    attendi_e_raccogli_istanza(...)   → void
-#    chiudi_istanza(ist, logger)       → void
-#    chiudi_blocco(blocco_ist, logger) → void
-#    cleanup_istanze_appese(pids, log) → void
-#    _pids_istanze                     → dict
-#    _pids_lock                        → Lock
 # ==============================================================================
-
-# Identificatore emulatore — usato da main.py per log e selezione
-NOME = "MuMuPlayer 12"
 
 import subprocess
 import threading
@@ -41,79 +26,6 @@ import config
 # quindi usiamo il PID del processo MuMuNxDevice.exe trovato dopo l'avvio.
 _pids_istanze: dict = {}
 _pids_lock = threading.Lock()
-
-# Nomi processo MuMuPlayer (varianti secondo versione)
-_MUMU_PROCESSES = [
-    "MuMuPlayer.exe",
-    "MuMuNxMain.exe",
-]
-
-# ------------------------------------------------------------------------------
-# Verifica e avvio automatico MuMuPlayer
-#
-# Contratto comune con bluestacks.assicura_avvio_manager():
-#   - ritorna True  se MuMu è operativo (già attivo o appena avviato)
-#   - ritorna False se non è stato possibile avviarlo
-# Chiamare da main.py subito dopo la selezione emulatore MuMuPlayer.
-# ------------------------------------------------------------------------------
-def assicura_avvio_manager(logger=None) -> bool:
-    """
-    Verifica che MuMuPlayer sia in esecuzione e che MuMuManager.exe sia
-    raggiungibile. Se MuMuPlayer non è attivo tenta di avviarlo tramite
-    MuMuManager launch.
-
-    Ritorna True se l'ambiente MuMu è operativo, False altrimenti.
-    """
-    def log(msg):
-        if logger: logger("MUMU", msg)
-
-    # 1. Verifica che MuMuManager.exe sia configurato
-    if not config.MUMU_MANAGER:
-        log("ERRORE: MUMU_MANAGER non trovato in config.py — verifica il percorso di installazione")
-        return False
-
-    # 2. Verifica se MuMuPlayer è già in esecuzione
-    if _mumu_player_attivo():
-        log("MuMuPlayer già in esecuzione ✓")
-        return True
-
-    # 3. Non è in esecuzione — prova ad avviare la prima istanza disponibile
-    # (MuMuPlayer non ha un manager separato: basta avviare una qualsiasi istanza
-    #  perché il processo principale MuMuNxMain.exe parta automaticamente)
-    log("MuMuPlayer non attivo — tentativo avvio tramite MuMuManager...")
-    try:
-        result = subprocess.run(
-            [config.MUMU_MANAGER, "control", "-v", "0", "launch"],
-            capture_output=True, text=True, timeout=20
-        )
-        log(f"MuMuManager launch → {result.stdout.strip() or 'OK'}")
-
-        # Attendi che il processo principale sia visibile
-        for _ in range(10):
-            time.sleep(2)
-            if _mumu_player_attivo():
-                log("MuMuPlayer avviato con successo ✓")
-                return True
-
-        log("WARN: MuMuPlayer avviato ma processo non ancora visibile — procedo comunque")
-        return True
-
-    except Exception as e:
-        log(f"ERRORE avvio MuMuPlayer: {e}")
-        return False
-
-
-def _mumu_player_attivo() -> bool:
-    """Ritorna True se almeno uno dei processi MuMuPlayer è in esecuzione."""
-    try:
-        result = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=10
-        )
-        output = result.stdout.lower()
-        return any(p.lower() in output for p in _MUMU_PROCESSES)
-    except Exception:
-        return False
 
 # ------------------------------------------------------------------------------
 # Avvia una singola istanza MuMuPlayer
@@ -161,7 +73,7 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
     3. Avvia gioco su quelle connesse
     """
     def log(msg):
-        if logger: logger("MUMU", msg)
+        if logger: logger("BS", msg)
 
     log(f"Avvio blocco: {[i[0] for i in blocco_ist]}")
 
@@ -308,14 +220,14 @@ def chiudi_istanza(ist: list, logger=None):
 # ------------------------------------------------------------------------------
 def chiudi_blocco(blocco_ist: list, logger=None):
     def log(msg):
-        if logger: logger("MUMU", msg)
+        if logger: logger("BS", msg)
 
     log(f"Chiusura blocco: {[i[0] for i in blocco_ist]}")
     for ist in blocco_ist:
         chiudi_istanza(ist, logger)
 
     try:
-        subprocess.run([config.MUMU_ADB, "kill-server"],
+        subprocess.run([config.BS_ADB, "kill-server"],
                        capture_output=True, timeout=10)
     except:
         pass
@@ -445,6 +357,10 @@ def _mumu_info_all() -> list:
     except Exception:
         pass
     return []
+    try:
+        return int(interno)
+    except ValueError:
+        return 0
 
 # ------------------------------------------------------------------------------
 # Utility: trova PID del processo MuMuNxDevice.exe per un dato indice istanza.
