@@ -331,18 +331,13 @@ def cleanup_istanze_appese(pids_gestiti: set, logger=None):
         if logger: logger("CLEANUP", msg)
 
     log("=== Controllo istanze appese a fine ciclo ===")
-    pids_attivi = _get_all_pids()
-
-    if not pids_attivi:
-        log("Nessun MuMuNxDevice.exe attivo ✓")
-        return
-
     killati = []
+
+    # 1. MuMuNxDevice.exe — processo principale istanza
+    pids_attivi = _get_all_pids()
     for pid in pids_attivi:
-        if pid in pids_gestiti:
-            log(f"PID={pid} era gestito ma ancora attivo \u2192 kill")
-        else:
-            log(f"PID={pid} NON gestito in questo ciclo (residuo) \u2192 kill")
+        label = "gestito" if pid in pids_gestiti else "residuo"
+        log(f"MuMuNxDevice PID={pid} ({label}) -> kill")
         try:
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
                            capture_output=True, timeout=10)
@@ -350,14 +345,29 @@ def cleanup_istanze_appese(pids_gestiti: set, logger=None):
         except Exception as e:
             log(f"Errore kill PID={pid}: {e}")
 
+    # 2. MuMuVMM.exe — VM headless frontend che rimane in memoria dopo shutdown
+    pids_vmm = _get_pids_per_processo("MuMuVMM.exe")
+    if pids_vmm:
+        log(f"MuMuVMM.exe residui: {len(pids_vmm)} -> kill")
+        for pid in pids_vmm:
+            try:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                               capture_output=True, timeout=10)
+                killati.append(pid)
+            except Exception as e:
+                log(f"Errore kill MuMuVMM PID={pid}: {e}")
+
+    if not killati:
+        log("Nessun processo MuMu residuo trovato ✓")
+        return
+
     time.sleep(1)
-    pids_ancora = _get_all_pids()
-    superstiti  = [p for p in killati if p in pids_ancora]
+    superstiti = [p for p in (_get_all_pids() + _get_pids_per_processo("MuMuVMM.exe"))
+                  if p in killati]
     if superstiti:
         log(f"WARN: {len(superstiti)} processo/i ancora attivi dopo cleanup: {superstiti}")
     else:
-        log(f"Cleanup completato - {len(killati)} processo/i terminati \u2713")
-
+        log(f"Cleanup completato - {len(killati)} processo/i terminati ✓")
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # Utility: connette ADB tramite MuMuManager e ritorna (ok, porta_reale)

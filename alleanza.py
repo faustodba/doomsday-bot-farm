@@ -63,21 +63,35 @@ def raccolta_alleanza(porta: str, nome: str, logger=None, ist: list = None) -> b
         return True
 
     # Coordinate pulsante Alleanza: dipende dal layout barra dell'istanza
+    # ist è un dict (config.ISTANZE) — usa get() per leggere layout in sicurezza
+    layout = ist.get("layout", 1) if isinstance(ist, dict) else 1
     coord_alleanza = config.get_coord_alleanza(ist) if ist else COORD_ALLEANZA
-    log(f"Alleanza: layout barra {ist[5] if ist and len(ist)>5 else 1} → tap {coord_alleanza}")
+    log(f"Alleanza: layout barra {layout} → tap {coord_alleanza}")
 
     try:
         log("Inizio raccolta ricompense Alleanza")
 
+        # Verifica stato prima di iniziare: deve essere in home.
+        # messaggi.py o il modulo precedente potrebbero aver lasciato
+        # la UI in uno stato non pulito.
+        import stato as _stato
+        s_ora, _ = _stato.rileva(porta)
+        if s_ora != "home":
+            log(f"Alleanza: stato '{s_ora}' — porto in home prima di procedere")
+            if not _stato.vai_in_home(porta, nome, logger, conferme=2):
+                log("Alleanza: impossibile tornare in home — skip")
+                return False
+            time.sleep(1.0)
+
         # 1. Apri menu Alleanza
         log("Alleanza: tap pulsante Alleanza")
         adb.tap(porta, coord_alleanza)
-        time.sleep(1.5)
+        time.sleep(2.0)  # aumentato da 1.5: dà tempo all'animazione apertura menu
 
         # 2. Apri sezione Dono (apre direttamente su Ricompense del negozio)
         log("Alleanza: tap Dono")
         adb.tap(porta, COORD_DONO)
-        time.sleep(1.5)
+        time.sleep(2.0)  # aumentato da 1.5: attende caricamento sezione Dono
 
         # 3. Ricompense Negozio → Rivendica x10 (tab già attivo all'apertura)
         log(f"Alleanza: Ricompense Negozio -> Rivendica x{RIVENDICA_CLICK}")

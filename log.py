@@ -50,7 +50,9 @@ def init():
 # Chiamato da main.py all'inizio di ogni ciclo, dopo debug.init_ciclo()
 # ------------------------------------------------------------------------------
 def init_ciclo(ciclo_dir: str, nomi_istanze: list):
-    """Apre/ricrea i file .log per istanza nella cartella del ciclo."""
+    """Apre/ricrea i file .log per istanza nella cartella del ciclo.
+    Archivia anche bot.log nella cartella del ciclo e ne inizia uno nuovo.
+    """
     with _istanza_lock:
         # Chiudi log del ciclo precedente
         for fh in _istanza_logs.values():
@@ -61,6 +63,27 @@ def init_ciclo(ciclo_dir: str, nomi_istanze: list):
         if not ciclo_dir:
             return
 
+        # --- Archivia bot.log nella cartella del ciclo corrente ---
+        # Prima di aprire il nuovo log, copia quello precedente in ciclo_dir
+        try:
+            import shutil
+            if os.path.isfile(_log_path) and os.path.getsize(_log_path) > 0:
+                dest = os.path.join(ciclo_dir, "bot.log")
+                shutil.copy2(_log_path, dest)
+        except Exception:
+            pass
+
+        # Apri nuovo bot.log per questo ciclo (sovrascrive)
+        with _lock:
+            try:
+                with open(_log_path, "w", encoding="utf-8") as f:
+                    f.write(f"{'='*55}\n")
+                    f.write(f"  DOOMSDAY BOT V5 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"{'='*55}\n")
+            except Exception:
+                pass
+
+        # Apri log per istanza
         for nome in nomi_istanze:
             path = os.path.join(ciclo_dir, f"{nome}.log")
             try:

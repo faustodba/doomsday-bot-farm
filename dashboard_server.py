@@ -19,8 +19,10 @@ import http.server
 import threading
 import os
 import json
+import time
 
 PORT = 8080
+LOG_TAIL_LINES = 300  # righe massime restituite da /log
 
 
 def _importa_modulo(nome, cartella):
@@ -51,6 +53,9 @@ def _run():
             self.send_header("Access-Control-Allow-Origin",  "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            # Header richiesto da ngrok per bypassare la pagina interstitial
+            # (necessario per accesso programmatico via Claude/curl/script)
+            self.send_header("ngrok-skip-browser-warning", "true")
             super().end_headers()
 
         def do_OPTIONS(self):
@@ -65,8 +70,68 @@ def _run():
             if self.path.startswith("/config_istanze.json"):
                 self._serve_config_istanze()
                 return
+            if self.path.startswith("/log"):
+                self._serve_log()
+                return
+            if self.path.startswith("/ping"):
+                self._json_ok({"ok": True, "ts": time.time(), "version": "ngrok-header-v2"})
+                return
+            if self.path.startswith("/robots.txt"):
+                body = b"User-agent: *\nAllow: /\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             # Tutti gli altri GET → file statici (dashboard.html, status.json, ...)
             super().do_GET()
+
+        def _serve_log(self):
+            """Restituisce le ultime LOG_TAIL_LINES righe di bot.log come JSON.
+            Parametri querystring:
+              ?n=100    → ultime 100 righe (default LOG_TAIL_LINES)
+              ?since=09:15:00  → solo righe con timestamp >= HH:MM:SS
+              ?filter=FAU_01   → solo righe che contengono il testo
+            """
+            try:
+                from urllib.parse import urlparse, parse_qs
+                qs = parse_qs(urlparse(self.path).query)
+                n       = int(qs.get("n",      [LOG_TAIL_LINES])[0])
+                since   = qs.get("since",  [None])[0]
+                filtro  = qs.get("filter", [None])[0]
+
+                log_path = os.path.join(cartella, "bot.log")
+                if not os.path.exists(log_path):
+                    self._json_ok({"righe": [], "totale": 0})
+                    return
+
+                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    righe = f.readlines()
+
+                # Applica filtro testo
+                if filtro:
+                    righe = [r for r in righe if filtro in r]
+
+                # Applica filtro timestamp (since=HH:MM:SS)
+                if since:
+                    def _ts(riga):
+                        # formato: [HH:MM:SS]
+                        try: return riga[1:9]
+                        except: return ""
+                    righe = [r for r in righe if _ts(r) >= since]
+
+                # Prendi ultime n righe
+                righe = righe[-n:]
+
+                payload = {
+                    "righe":  [r.rstrip("\n") for r in righe],
+                    "totale": len(righe),
+                    "ts":     time.time(),
+                }
+                self._json_ok(payload)
+            except Exception as e:
+                self._json_err(str(e))
 
         def _serve_config_istanze(self):
             """Restituisce le istanze fresche da config.py come JSON."""

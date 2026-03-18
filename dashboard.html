@@ -338,6 +338,14 @@
 <script>
 const STATUS_FILE = "status.json";
 const REFRESH_MS  = 3000;
+
+// Token autenticazione per accesso pubblico via bridge.
+// Se l'URL contiene ?token=xxx, viene aggiunto automaticamente a tutte le fetch.
+const _urlToken = new URLSearchParams(window.location.search).get("token") || "";
+function _url(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  return _urlToken ? path + sep + "token=" + _urlToken : path;
+}
 const RES_KEYS    = ["pomodoro","legno","acciaio","petrolio"];
 const RES_ICO     = { pomodoro:"🍅", legno:"🪵", acciaio:"⚙️", petrolio:"🛢️", diamanti:"💎" };
 
@@ -352,7 +360,7 @@ let _waitTotal = 0;
 
 async function fetchStatus() {
   try {
-    const res = await fetch(STATUS_FILE + "?t=" + Date.now());
+    const res = await fetch(_url(STATUS_FILE + "?t=" + Date.now()));
     if (!res.ok) throw new Error();
     return await res.json();
   } catch(e) { return null; }
@@ -662,8 +670,8 @@ let _cfgIstanze  = null;  // cache config_istanze.json (istanze fresche da confi
 async function rtCarica() {
   try {
     const [resRt, resCfg] = await Promise.all([
-      fetch("runtime.json?t="       + Date.now()),
-      fetch("config_istanze.json?t=" + Date.now()),
+      fetch(_url("runtime.json?t=" + Date.now())),
+      fetch(_url("config_istanze.json?t=" + Date.now())),
     ]);
     if (resRt.ok)  _rtData     = await resRt.json();
     if (resCfg.ok) _cfgIstanze = await resCfg.json();
@@ -843,7 +851,7 @@ async function rtSalvaIstanze() {
 // POST runtime.json al server
 async function _rtPost(dati) {
   try {
-    const res = await fetch("runtime.json", {
+    const res = await fetch(_url("runtime.json"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(dati)

@@ -215,6 +215,14 @@ def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
         # Ancora in home → prossimo tentativo (con delay più lungo)
         if tentativo < MAX_TENTATIVI_MAPPA - 1:
             log(f"Ancora in home - riprovo (tentativo {tentativo + 2}/{MAX_TENTATIVI_MAPPA})")
+            # Dopo il primo fallimento prova a chiudere banner/popup con BACK
+            # (banner eventi coprono il pulsante mappa ma non cambiano il pixel di stato)
+            if tentativo == 0:
+                log("Provo a chiudere eventuali banner con BACK prima di riprovare")
+                adb.keyevent(porta, "KEYCODE_BACK")
+                time.sleep(1.0)
+                adb.keyevent(porta, "KEYCODE_BACK")
+                time.sleep(1.0)
 
     log(f"Impossibile raggiungere mappa dopo {MAX_TENTATIVI_MAPPA} tap - abbandono")
     return False
