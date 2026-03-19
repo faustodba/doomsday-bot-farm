@@ -324,6 +324,30 @@ def chiudi_blocco(blocco_ist: list, logger=None):
     log("ADB server fermato - blocco chiuso")
 
 # ------------------------------------------------------------------------------
+# Cleanup fine ciclo: elimina processi MuMu rimasti appesi
+
+def _get_pids_per_processo(nome_exe):
+    pids = []
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {nome_exe}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=10
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(',')
+            if len(parts) >= 2:
+                try:
+                    pids.append(int(parts[1].strip('"')))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return pids
+
+
 # Cleanup fine ciclo: elimina processi MuMuNxDevice.exe rimasti appesi
 # ------------------------------------------------------------------------------
 def cleanup_istanze_appese(pids_gestiti: set, logger=None):

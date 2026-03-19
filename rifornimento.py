@@ -175,42 +175,47 @@ def _reset_slot_corrente() -> datetime:
 
 def _carica_stato(nome: str, porta: str = "") -> dict:
     """
-    Legge il file stato. Se non esiste lo crea con quota_esaurita=False.
-    In caso di errore di lettura/parsing ritorna lo stato di default (non blocca).
+    Legge la sezione rifornimento dallo stato unificato per istanza.
+    Migra automaticamente dal vecchio file rifornimento_stato_*.json se presente.
     """
-    path = _path_stato(nome, porta)
+    import scheduler as _sched
     default = {"quota_esaurita": False, "ultimo_reset_utc": ""}
 
+    # Prova a leggere dal file unificato
+    sezione = _sched.carica_sezione(nome, porta, "rifornimento")
+    if sezione:
+        return {**default, **sezione}
+
+    # Migrazione dal vecchio file separato
+    path_vecchio = _path_stato(nome, porta)
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path_vecchio, 'r', encoding='utf-8') as f:
             dati = json.load(f)
-        # Merge con default per tollerare campi mancanti in versioni precedenti
-        return {**default, **dati}
+        dati_migrati = {**default, **dati}
+        _sched.salva_sezione(nome, porta, "rifornimento", dati_migrati)
+        print(f"[RIF] Migrato {os.path.basename(path_vecchio)} → stato unificato")
+        try:
+            os.remove(path_vecchio)
+        except Exception:
+            pass
+        return dati_migrati
     except FileNotFoundError:
-        # Prima esecuzione: crea subito il file (evita ricreazione ad ogni ciclo)
-        _salva_stato(nome, porta, False)
-        return default
+        pass
     except Exception as e:
-        # JSON corrotto o errore I/O: reset per sicurezza, non bloccare
-        print(f"[RIF] WARN _carica_stato: {e} — uso default")
-        return default
+        print(f"[RIF] WARN migrazione stato: {e}")
+
+    return default
 
 
 def _salva_stato(nome: str, porta: str, quota_esaurita: bool) -> None:
     """
-    Salva lo stato sul file JSON. Scrive sempre il reset-slot corrente come
-    `ultimo_reset_utc` così il confronto del giorno successivo funziona correttamente.
+    Salva la sezione rifornimento nello stato unificato per istanza.
     """
-    path = _path_stato(nome, porta)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump({
-                "quota_esaurita": quota_esaurita,
-                "ultimo_reset_utc": _reset_slot_corrente().isoformat(),
-            }, f, indent=2)
-    except Exception as e:
-        print(f"[RIF] WARN _salva_stato: impossibile scrivere {path}: {e}")
+    import scheduler as _sched
+    _sched.salva_sezione(nome, porta, "rifornimento", {
+        "quota_esaurita": quota_esaurita,
+        "ultimo_reset_utc": _reset_slot_corrente().isoformat(),
+    })
 
 
 def _controlla_reset(nome: str, porta: str = "", logger=None) -> bool:

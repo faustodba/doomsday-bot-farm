@@ -3,12 +3,15 @@ __pycache__/
 *.pyc
 *.pyo
 
+
 # File di stato runtime (per istanza)
+istanza_stato_*.json
 rifornimento_stato_*.json
 schedule_stato_*.json
 status.json
 runtime.json
 timing.json
+
 
 # Log
 *.log
@@ -49,8 +52,13 @@ step_*/
 
 # File JSON runtime (già presenti ma aggiungo pattern espliciti)
 *.tmp
-
+*.bak
 
 # PNG: ignora tutto tranne i template ufficiali
 *.png
 !templates/*.png
+
+
+
+# Cartella di appoggio (refuso)
+appoggio/

@@ -551,6 +551,10 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     else:
         log("Alleanza disabilitata (ALLEANZA_ABILITATA=False) - skip")
 
+    # --- DAILY TASKS — eseguiti in HOME, schedulazione 24h ---
+    import daily_tasks as _daily
+    _daily.esegui_daily_tasks(porta, nome, logger)
+
     # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
     try:
         sped = rifornimento.esegui_rifornimento(

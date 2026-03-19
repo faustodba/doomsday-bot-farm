@@ -2,24 +2,32 @@
 #  DOOMSDAY BOT V5 - scheduler.py
 #  Gestione esecuzione schedulata per task periodici per istanza
 #
-#  Gestisce:
-#    - messaggi : raccolta ricompense messaggi (ogni SCHEDULE_ORE_MESSAGGI ore)
-#    - alleanza : raccolta ricompense alleanza (ogni SCHEDULE_ORE_ALLEANZA ore)
+#  V5.17.1: File stato unificato per istanza
+#    File: istanza_stato_{nome}_{porta}.json
+#    Struttura:
+#      {
+#        "schedule": {
+#          "messaggi": {"ultimo_ts": "2026-03-18T12:00:00"},
+#          "alleanza":  {"ultimo_ts": "2026-03-18T12:00:00"},
+#          "vip":       {"ultimo_ts": "2026-03-18T12:00:00"}
+#        },
+#        "rifornimento": {
+#          "quota_esaurita": false,
+#          "ultimo_reset_utc": "..."
+#        },
+#        "daily_tasks": {
+#          "vip_claimed": false,
+#          "ultimo_reset_utc": "..."
+#        }
+#      }
 #
-#  Logica:
-#    - Ogni istanza ha un file stato separato: schedule_stato_{nome}_{porta}.json
-#    - Per ogni task: confronta datetime.now() con ultimo_ts + intervallo_ore
-#    - Se file non esiste (prima esecuzione): esegue sempre
-#    - Se già eseguito meno di N ore fa: salta e logga tempo rimanente
+#  Retrocompatibilità: se esiste il vecchio schedule_stato_*.json lo migra
+#  automaticamente nel nuovo file unificato e rimuove il vecchio.
 #
-#  API pubblica:
+#  API pubblica (invariata):
 #    deve_eseguire(nome, porta, task, logger)  → bool
 #    registra_esecuzione(nome, porta, task)    → None
-#
-#  Task supportati: "messaggi", "alleanza"
-#  Intervalli configurabili in config.py:
-#    SCHEDULE_ORE_MESSAGGI = 12
-#    SCHEDULE_ORE_ALLEANZA = 12
+#    ore_alla_prossima(nome, porta, task)      → float
 # ==============================================================================
 
 import json
@@ -32,86 +40,116 @@ import config
 _DEFAULT_ORE = {
     "messaggi": 12,
     "alleanza":  12,
+    "vip":       24,
 }
 
-# Formato timestamp nel file stato
 _TS_FMT = "%Y-%m-%dT%H:%M:%S"
 
 
 # ------------------------------------------------------------------------------
-# Helpers interni
+# Path file stato unificato
 # ------------------------------------------------------------------------------
 
 def _safe_id(val: str) -> str:
-    """Normalizza stringa per uso in filename."""
     s = re.sub(r'[^A-Za-z0-9_-]+', '_', str(val)).strip('_')
     return s or 'noid'
 
 
-def _path_stato(nome: str, porta: str) -> str:
-    """Path file stato schedulazione per istanza."""
+def path_stato_istanza(nome: str, porta: str) -> str:
+    """Path file stato unificato per istanza."""
+    return os.path.join(
+        config.BOT_DIR,
+        f"istanza_stato_{_safe_id(nome)}_{_safe_id(porta)}.json"
+    )
+
+
+def _path_vecchio_schedule(nome: str, porta: str) -> str:
     return os.path.join(
         config.BOT_DIR,
         f"schedule_stato_{_safe_id(nome)}_{_safe_id(porta)}.json"
     )
 
 
-def _ore_intervallo(task: str) -> float:
-    """Ritorna l'intervallo in ore per il task dal config, con fallback al default."""
-    chiave = f"SCHEDULE_ORE_{task.upper()}"
-    return float(getattr(config, chiave, _DEFAULT_ORE.get(task, 12)))
-
+# ------------------------------------------------------------------------------
+# Carica / salva stato unificato
+# ------------------------------------------------------------------------------
 
 def _carica_stato(nome: str, porta: str) -> dict:
-    """Legge il file stato. Se non esiste o corrotto ritorna dict vuoto."""
-    path = _path_stato(nome, porta)
+    """
+    Carica il file stato unificato.
+    Se non esiste prova a migrare dal vecchio schedule_stato_*.json.
+    """
+    path = path_stato_istanza(nome, porta)
+
+    # Prova a caricare il file unificato
     try:
         with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            dati = json.load(f)
+        # Garantisce struttura minima
+        dati.setdefault("schedule", {})
+        dati.setdefault("rifornimento", {})
+        dati.setdefault("daily_tasks", {})
+        return dati
     except FileNotFoundError:
-        return {}
+        pass
     except Exception as e:
-        print(f"[SCHEDULER] WARN _carica_stato {nome}: {e} — uso default")
-        return {}
+        print(f"[SCHEDULER] WARN carica_stato {nome}: {e} — uso default")
+
+    # Migrazione dal vecchio file schedule_stato_*.json
+    stato = {"schedule": {}, "rifornimento": {}, "daily_tasks": {}}
+    path_vecchio = _path_vecchio_schedule(nome, porta)
+    try:
+        with open(path_vecchio, 'r', encoding='utf-8') as f:
+            vecchio = json.load(f)
+        stato["schedule"] = vecchio
+        print(f"[SCHEDULER] Migrato {os.path.basename(path_vecchio)} → {os.path.basename(path)}")
+        _salva_stato(nome, porta, stato)
+        # Rimuovi vecchio file
+        try:
+            os.remove(path_vecchio)
+        except Exception:
+            pass
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[SCHEDULER] WARN migrazione {nome}: {e}")
+
+    return stato
 
 
 def _salva_stato(nome: str, porta: str, stato: dict) -> None:
-    """Scrive il file stato in modo atomico."""
-    path = _path_stato(nome, porta)
+    path = path_stato_istanza(nome, porta)
     tmp  = path + ".tmp"
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(stato, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
     except Exception as e:
-        print(f"[SCHEDULER] ERRORE _salva_stato {nome}: {e}")
+        print(f"[SCHEDULER] ERRORE salva_stato {nome}: {e}")
 
 
 # ------------------------------------------------------------------------------
-# API pubblica
+# API pubblica — schedulazione task periodici
 # ------------------------------------------------------------------------------
+
+def _ore_intervallo(task: str) -> float:
+    chiave = f"SCHEDULE_ORE_{task.upper()}"
+    return float(getattr(config, chiave, _DEFAULT_ORE.get(task, 12)))
+
 
 def deve_eseguire(nome: str, porta: str, task: str, logger=None) -> bool:
     """
     Verifica se il task deve essere eseguito per questa istanza.
-
-    Ritorna True se:
-      - File stato non esiste (prima esecuzione assoluta)
-      - Task non presente nel file (mai eseguito)
-      - Sono trascorse >= N ore dall'ultima esecuzione
-
-    Ritorna False se il task è stato eseguito meno di N ore fa.
-    In questo caso logga il tempo rimanente alla prossima esecuzione.
+    Ritorna True se mai eseguito o se l'intervallo è scaduto.
     """
     def log(msg):
         if logger: logger(nome, msg)
 
-    ore = _ore_intervallo(task)
+    ore   = _ore_intervallo(task)
     stato = _carica_stato(nome, porta)
+    ultimo_ts_str = stato.get("schedule", {}).get(task, {}).get("ultimo_ts", "")
 
-    ultimo_ts_str = stato.get(task, {}).get("ultimo_ts", "")
     if not ultimo_ts_str:
-        # Mai eseguito — procedi sempre
         log(f"[SCHED] {task}: prima esecuzione — procedo")
         return True
 
@@ -121,41 +159,34 @@ def deve_eseguire(nome: str, porta: str, task: str, logger=None) -> bool:
         log(f"[SCHED] {task}: timestamp corrotto '{ultimo_ts_str}' — procedo per sicurezza")
         return True
 
-    prossima = ultimo_ts + timedelta(hours=ore)
+    prossima     = ultimo_ts + timedelta(hours=ore)
     ora_corrente = datetime.now()
 
     if ora_corrente >= prossima:
         log(f"[SCHED] {task}: intervallo {ore}h scaduto (ultima: {ultimo_ts_str}) — procedo")
         return True
     else:
-        manca = prossima - ora_corrente
-        ore_manca  = int(manca.total_seconds() // 3600)
-        min_manca  = int((manca.total_seconds() % 3600) // 60)
+        manca     = prossima - ora_corrente
+        ore_manca = int(manca.total_seconds() // 3600)
+        min_manca = int((manca.total_seconds() % 3600) // 60)
         log(f"[SCHED] {task}: già eseguito — skip (prossima tra {ore_manca}h {min_manca:02d}m)")
         return False
 
 
 def registra_esecuzione(nome: str, porta: str, task: str) -> None:
-    """
-    Registra il timestamp dell'esecuzione appena completata per il task.
-    Chiamare subito dopo l'esecuzione riuscita del task.
-    """
+    """Registra il timestamp dell'esecuzione appena completata."""
     stato = _carica_stato(nome, porta)
-    if task not in stato:
-        stato[task] = {}
-    stato[task]["ultimo_ts"] = datetime.now().strftime(_TS_FMT)
+    stato.setdefault("schedule", {})
+    stato["schedule"].setdefault(task, {})
+    stato["schedule"][task]["ultimo_ts"] = datetime.now().strftime(_TS_FMT)
     _salva_stato(nome, porta, stato)
 
 
 def ore_alla_prossima(nome: str, porta: str, task: str) -> float:
-    """
-    Ritorna le ore mancanti alla prossima esecuzione del task.
-    Ritorna 0.0 se il task deve già essere eseguito.
-    Utile per logging e dashboard futura.
-    """
-    ore = _ore_intervallo(task)
+    """Ritorna le ore mancanti alla prossima esecuzione. 0.0 se già scaduto."""
+    ore   = _ore_intervallo(task)
     stato = _carica_stato(nome, porta)
-    ultimo_ts_str = stato.get(task, {}).get("ultimo_ts", "")
+    ultimo_ts_str = stato.get("schedule", {}).get(task, {}).get("ultimo_ts", "")
     if not ultimo_ts_str:
         return 0.0
     try:
@@ -165,3 +196,20 @@ def ore_alla_prossima(nome: str, porta: str, task: str) -> float:
         return max(0.0, manca / 3600)
     except ValueError:
         return 0.0
+
+
+# ------------------------------------------------------------------------------
+# API pubblica — sezione rifornimento (usata da rifornimento.py)
+# ------------------------------------------------------------------------------
+
+def carica_sezione(nome: str, porta: str, sezione: str) -> dict:
+    """Ritorna la sezione specificata dallo stato unificato."""
+    stato = _carica_stato(nome, porta)
+    return stato.get(sezione, {})
+
+
+def salva_sezione(nome: str, porta: str, sezione: str, dati: dict) -> None:
+    """Aggiorna una sezione dello stato unificato senza toccare le altre."""
+    stato = _carica_stato(nome, porta)
+    stato[sezione] = dati
+    _salva_stato(nome, porta, stato)

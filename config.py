@@ -138,13 +138,13 @@ ISTANZE = [
 # --- MuMuPlayer ---
 ISTANZE_MUMU = [
     {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": False},
+    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
     {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
     {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "abilitata": True},
 ]
@@ -269,12 +269,14 @@ DELAY_MARCIA      = 4000   # ms attesa dopo MARCIA
 # ==============================================================================
 
 # --- Schedulazione ---
-SCHEDULE_ORE_MESSAGGI = 12   # ore minime tra esecuzioni raccolta messaggi
-SCHEDULE_ORE_ALLEANZA = 12   # ore minime tra esecuzioni raccolta alleanza
+SCHEDULE_ORE_MESSAGGI = 4    # ore minime tra esecuzioni raccolta messaggi
+SCHEDULE_ORE_ALLEANZA = 4    # ore minime tra esecuzioni raccolta alleanza
+SCHEDULE_ORE_VIP      = 24   # ore minime tra esecuzioni ricompense VIP
 
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
-ALLEANZA_ABILITATA = True    # False = salta raccolta doni alleanza
-MESSAGGI_ABILITATI = True    # False = salta raccolta messaggi sistema/alleanza
+ALLEANZA_ABILITATA  = True   # False = salta raccolta doni alleanza
+MESSAGGI_ABILITATI  = True   # False = salta raccolta messaggi sistema/alleanza
+DAILY_VIP_ABILITATO = True   # False = salta ricompense VIP giornaliere
 
 # --- Rifornimento alleanza ---
 RIFORNIMENTO_ABILITATO         = True
