@@ -110,6 +110,7 @@ _verifica_percorsi()
 #     truppe      : truppe per squadra (0 = MAX, None = usa TRUPPE_RACCOLTA globale)
 #     max_squadre : max raccoglitori da inviare (1-5, 0 = tutte le libere)
 #     layout      : 1 = barra standard 5 icone | 2 = compatto 4 icone (no Bestia)
+#     livello     : livello nodo da cercare (1-6, default 6) — sovrascrivibile da runtime
 #     abilitata   : True = partecipa al ciclo | False = visibile in dashboard ma esclusa
 #
 #   SOLO BlueStacks:
@@ -123,30 +124,30 @@ _verifica_percorsi()
 
 # --- BlueStacks ---
 ISTANZE = [
-    {"nome": "FAU_00", "interno": "Pie64_13", "porta": "5685", "truppe": 0,     "max_squadre": 5, "layout": 1, "abilitata": False},
-    {"nome": "FAU_01", "interno": "Pie64_6",  "porta": "5615", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_02", "interno": "Pie64",    "porta": "5555", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_03", "interno": "Pie64_7",  "porta": "5625", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_04", "interno": "Pie64_8",  "porta": "5635", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_05", "interno": "Pie64_9",  "porta": "5645", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_06", "interno": "Pie64_11", "porta": "5665", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_07", "interno": "Pie64_10", "porta": "5655", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": False},
-    {"nome": "FAU_08", "interno": "Pie64_12", "porta": "5675", "truppe": 12000, "max_squadre": 4, "layout": 1, "abilitata": True},
-    {"nome": "FAU_09", "interno": "Pie64_14", "porta": "5695", "truppe": 12000, "max_squadre": 4, "layout": 2, "abilitata": True},  # layout 2: 4 icone, no Bestia
+    {"nome": "FAU_00", "interno": "Pie64_13", "porta": "5685", "truppe": 0,     "max_squadre": 5, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_01", "interno": "Pie64_6",  "porta": "5615", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_02", "interno": "Pie64",    "porta": "5555", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_03", "interno": "Pie64_7",  "porta": "5625", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_04", "interno": "Pie64_8",  "porta": "5635", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_05", "interno": "Pie64_9",  "porta": "5645", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_06", "interno": "Pie64_11", "porta": "5665", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_07", "interno": "Pie64_10", "porta": "5655", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_08", "interno": "Pie64_12", "porta": "5675", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": True},
+    {"nome": "FAU_09", "interno": "Pie64_14", "porta": "5695", "truppe": 12000, "max_squadre": 4, "layout": 2, "livello": 6, "abilitata": True},  # layout 2: 4 icone, no Bestia
 ]
 
 # --- MuMuPlayer ---
 ISTANZE_MUMU = [
-    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "abilitata": False},
-    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "abilitata": True},
-    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "abilitata": True},
+    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "abilitata": False},
+    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "abilitata": True},
 ]
 
 # ==============================================================================

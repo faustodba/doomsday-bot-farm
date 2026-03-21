@@ -43,3 +43,30 @@
 - Migliorata robustezza runtime e flusso principale
 - Fix dashboard runtime e gestione overrides
 - Chiarita policy repository (png solo in templates, json esclusi)
+
+## 2026-03-21 — V5.18 (selezione livello nodo + produzione oraria dashboard)
+
+### raccolta.py
+- `_cerca_nodo`: selezione livello nodo via popup UI — reset con 6 tap su `—` (porta sempre a Lv.1 indipendentemente dal livello precedente), poi `(livello-1)` tap su `+`
+- Coordinate assolute per `—`, `+`, SEARCH misurate su screenshot reali 960x540 per tutti i tipi (campo/segheria/acciaio/petrolio) — necessario perché il popup del petrolio è clamped al bordo destro dello schermo
+- Aggiunto parametro `livello_target` a `_cerca_nodo` e `_tap_invia_squadra`, propagato fino a `raccolta_istanza`
+- `raccolta_istanza`: legge `livello` dall'istanza (`ist.get("livello", config.LIVELLO_RACCOLTA)`)
+- OCR risorse inizio ciclo: retry multiplo con backoff 2s → 3s → 4s (era singolo retry fisso a 2s); ogni retry aggiorna solo le risorse ancora mancanti, preserva quelle già lette
+- `_leggi_livello_nodo`: funzione OCR per leggere livello dal titolo popup nodo (pattern IT "Lv.N" e EN "Level: N") — usata per scartare nodi sotto-livello
+
+### config.py
+- Aggiunto campo `"livello": 6` a tutte le istanze `ISTANZE` (BlueStacks) e `ISTANZE_MUMU` (MuMuPlayer)
+- Aggiornato commento campi comuni con descrizione campo `livello`
+
+### dashboard.html
+- Aggiunta colonna **Lv.** nella tabella runtime istanze con `<select>` opzioni 5/6/7
+- Salvataggio `livello` come override esattamente come truppe/squadre/layout
+- Nuovo pannello **Produzione oraria** in sidebar: M/h ciclo corrente + media storica ultimi 10 cicli per tutte e 4 le risorse + totale aggregato
+- Produzione oraria visibile anche nella card di ogni istanza
+- Nuova colonna M/h nello storico cicli
+
+### dashboard_server.py
+- Esposto campo `livello` in `/config_istanze.json` per entrambi BS e MuMu
+
+### runtime.py
+- `istanze_attive()`: aggiunto supporto override `livello` per-istanza

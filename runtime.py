@@ -274,6 +274,7 @@ def istanze_attive(rt: dict, emulatore: str) -> list:
         if "max_squadre" in ovr: ist_out["max_squadre"] = int(ovr["max_squadre"])
         if "layout"      in ovr: ist_out["layout"]      = int(ovr["layout"])
         if "lingua"      in ovr: ist_out["lingua"]      = str(ovr["lingua"])
+        if "livello"     in ovr: ist_out["livello"]     = int(ovr["livello"])
 
         # Normalizza porta per tipo emulatore
         if "BlueStacks" in emulatore:

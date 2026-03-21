@@ -148,6 +148,7 @@ def _run():
                         "layout":      ist.get("layout", 1),
                         "lingua":      ist.get("lingua", "it"),
                         "abilitata":   ist.get("abilitata", True),
+                        "livello":     ist.get("livello", 6),
                     }
 
                 def _mumu(ist):
@@ -160,6 +161,7 @@ def _run():
                         "layout":      ist.get("layout", 1),
                         "lingua":      ist.get("lingua", "en"),
                         "abilitata":   ist.get("abilitata", True),
+                        "livello":     ist.get("livello", 6),
                     }
 
                 payload = {

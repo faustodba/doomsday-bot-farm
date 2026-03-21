@@ -182,6 +182,54 @@ def _blacklist_get_state(blacklist, blacklist_lock, chiave_nodo):
 TERRITORIO_BUFF_ZONA = (250, 340, 420, 370)  # (x1,y1,x2,y2) — riga "+30%"
 TERRITORIO_SOGLIA_PX = 20                     # pixel verdi minimi per IN territorio
 
+# Zona titolo popup nodo (es. "Campo Lv.6") — riga in alto della maschera
+# Calibrata su 960x540: il titolo appare centrato, y≈155-180
+NODO_TITOLO_ZONA = (250, 150, 720, 185)
+# Livello minimo accettabile — nodi sotto questa soglia vengono scartati
+NODO_LIVELLO_MIN = getattr(__import__('config'), 'LIVELLO_RACCOLTA', 6)
+
+
+def _leggi_livello_nodo(screen_path: str) -> int:
+    """
+    Legge il livello del nodo dal titolo del popup (es. "Campo Lv.6" → 6).
+
+    Ritorna:
+        int >= 1  se il livello è leggibile
+        -1        se OCR fallisce (fail-safe: non scartare per dubbio)
+    """
+    try:
+        from PIL import Image as _PIL_Image
+        import pytesseract
+        import re as _re
+
+        img = _PIL_Image.open(screen_path)
+        crop = img.crop(NODO_TITOLO_ZONA)
+        w, h = crop.size
+        # Upscale 4x + scala grigi + soglia
+        big = crop.resize((w * 4, h * 4), _PIL_Image.LANCZOS)
+        gray = big.convert("L")
+        bw = gray.point(lambda p: 255 if p > 130 else 0)
+
+        cfg = "--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789. "
+        import threading as _threading
+        # Usa il lock Tesseract di ocr.py se disponibile
+        try:
+            import ocr as _ocr_mod
+            lock = _ocr_mod._tesseract_lock
+        except Exception:
+            lock = _threading.Lock()
+
+        with lock:
+            testo = pytesseract.image_to_string(bw, config=cfg).strip()
+
+        # Cerca pattern "Lv.N" o "Lv N" o "Level N" (EN: "Lv.6")
+        m = _re.search(r'[Ll][Vv]\.?\s*(\d+)', testo)
+        if m:
+            return int(m.group(1))
+        return -1
+    except Exception:
+        return -1
+
 def _nodo_in_territorio(screen_path: str) -> bool:
     """
     Ritorna True se il popup del nodo mostra il buff territorio (riga verde "+30%").
@@ -206,10 +254,21 @@ def _nodo_in_territorio(screen_path: str) -> bool:
 # Raccolta: ricerca nodo + OCR coordinate
 # ------------------------------------------------------------------------------
 
-def _cerca_nodo(porta, tipo, coords=None):
-    """Esegue LENTE → selezione tipo × 2 → CERCA.
+def _cerca_nodo(porta, tipo, coords=None, livello_target=None):
+    """Esegue LENTE → selezione tipo × 2 → imposta livello target → CERCA.
+
+    Il popup livello e' sempre ancorato all'icona del tipo selezionato (960x540).
+    Offset misurati su screenshot reali:
+      — : icona_x - 116  y=295   (pulsante sinistro)
+      + : icona_x + 109  y=293   (pulsante destro)
+      SEARCH: icona_x + 3  y=352
+
+    Reset: sempre 6 tap su — (porta a Lv.1 da qualsiasi livello, max=7)
+    Sale:  (livello_target - 1) tap su +
+
     Tipi supportati: campo, segheria, acciaio, petrolio.
-    coords: UICoords — se None usa config direttamente (retrocompatibilità).
+    coords: UICoords — se None usa config direttamente (retrocompatibilita').
+    livello_target: livello nodo da cercare (1-7). Default: config.LIVELLO_RACCOLTA.
     """
     if coords is not None:
         tap_icona, tap_cerca = coords.per_tipo(tipo)
@@ -226,8 +285,58 @@ def _cerca_nodo(porta, tipo, coords=None):
 
     adb.tap(porta, tap_icona)
     adb.tap(porta, tap_icona)
-    time.sleep(0.5)
-    adb.tap(porta, tap_cerca, delay_ms=config.DELAY_CERCA)
+    time.sleep(1.2)  # attesa apertura popup livello
+
+    # Offset misurati su screenshot reali 960x540 (tipo campo icona_x=410):
+    #   — : centro x=294  → offset = 410-294 = 116
+    #   + : centro x=519  → offset = 519-410 = 109
+    #   SEARCH: centro x=413 → offset = 3
+    _OFFSET_MENO_X  = 116
+    _OFFSET_PIU_X   = 109
+    _OFFSET_CERCA_X =   3
+    _MENO_Y         = 295   # y centro pulsante —
+    _PIU_Y          = 293   # y centro pulsante +
+    _CERCA_Y        = 352   # y centro pulsante SEARCH
+
+    icona_x = tap_icona[0]
+    x_meno  = icona_x - _OFFSET_MENO_X
+    x_piu   = icona_x + _OFFSET_PIU_X
+    x_cerca = icona_x + _OFFSET_CERCA_X
+
+    # Livello target: dall'istanza se disponibile, altrimenti config globale
+    _lv = int(livello_target) if livello_target and int(livello_target) > 0 else config.LIVELLO_RACCOLTA
+    _lv = max(1, min(7, _lv))  # clamp 1-7
+
+    # Il popup si ancora all'icona ma non può uscire dal bordo destro (960px).
+    # Per petrolio (icona_x=820) il popup è clamped a destra → coordinate assolute.
+    # Coordinate assolute misurate su screen reali 960x540:
+    #   campo:    —(294,295)  +(519,293)  S(413,352)
+    #   segheria: —(419,295)  +(644,293)  S(538,352)
+    #   acciaio:  —(556,295)  +(781,293)  S(675,352)
+    #   petrolio: —(701,295)  +(890,293)  S(791,352)  ← clamped al bordo dx
+    _COORD_ASSOLUTE = {
+        "campo":    {"meno": (294, 295), "piu": (519, 293), "search": (413, 352)},
+        "segheria": {"meno": (419, 295), "piu": (644, 293), "search": (538, 352)},
+        "acciaio":  {"meno": (556, 295), "piu": (781, 293), "search": (675, 352)},
+        "petrolio": {"meno": (701, 295), "piu": (890, 293), "search": (791, 352)},
+    }
+    _coords_lv = _COORD_ASSOLUTE.get(tipo, _COORD_ASSOLUTE["campo"])
+    _tap_meno   = _coords_lv["meno"]
+    _tap_piu    = _coords_lv["piu"]
+    _tap_search = _coords_lv["search"]
+
+    # Reset a Lv.1: 6 tap su — (livello max=7, quindi 6 tap garantiscono Lv.1)
+    # poi sale a Lv._lv con (_lv - 1) tap su +
+    import log as _log_cerca
+    try: _log_cerca.logger("CERCA", f"[LV] {tipo} Lv.{_lv} reset -6@{_tap_meno} poi +{_lv-1}@{_tap_piu}")
+    except Exception: pass
+    for _ in range(6):
+        adb.tap(porta, _tap_meno, delay_ms=120)
+    for _ in range(_lv - 1):
+        adb.tap(porta, _tap_piu, delay_ms=150)
+
+    # SEARCH con coordinate assolute misurate
+    adb.tap(porta, _tap_search, delay_ms=config.DELAY_CERCA)
 
 
 def _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, retry_n, logger):
@@ -408,15 +517,15 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
 # ------------------------------------------------------------------------------
 
 def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
-                      logger=None, blacklist=None, blacklist_lock=None, coords=None):
-    """Ritorna (chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio)."""
+                      logger=None, blacklist=None, blacklist_lock=None, coords=None, cooldown_map=None, livello_target=None):
+    """Ritorna (chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio, cooldown_s)."""
     def log(msg):
         if logger:
             logger(nome, msg)
 
     _nodo_coord = coords.nodo if coords else config.TAP_NODO
 
-    _cerca_nodo(porta, tipo, coords)
+    _cerca_nodo(porta, tipo, coords, livello_target=livello_target)
     chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 1, logger)
 
     if chiave_nodo is None:
@@ -427,57 +536,41 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
         adb.tap(porta, _nodo_coord)
         time.sleep(0.6)
         ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger, coords)
-        return None, False, ok, eta_s, False
+        return None, False, ok, eta_s, False, 0
 
     if _blacklist_pulisci_e_verifica(blacklist, blacklist_lock, chiave_nodo):
         log(f"Nodo ({cx},{cy}) in blacklist - riprovo CERCA")
         debug.salva_screen(screen_nodo, nome, "fase3_blacklist", squadra, tentativo, f"{cx}_{cy}_r1")
 
         chiave_primo = chiave_nodo
-        _cerca_nodo(porta, tipo, coords)
+        _cerca_nodo(porta, tipo, coords, livello_target=livello_target)
         chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 2, logger)
 
         if chiave_nodo == chiave_primo or chiave_nodo is None:
             # Il gioco continua a proporre lo stesso nodo occupato.
-            # Calcoliamo il tempo di attesa, poi torniamo in mappa pulita
-            # durante l'attesa — evita tap fuori contesto con UI aperta.
+            # Step2: invece di attendere qui (bloccante), mettiamo il *tipo* in cooldown e proseguiamo con altri tipi.
             attesa = 3
             if _blacklist_get_state(blacklist, blacklist_lock, chiave_primo) == "COMMITTED":
                 eta_prev = _blacklist_get_eta(blacklist, blacklist_lock, chiave_primo)
                 if isinstance(eta_prev, (int, float)) and eta_prev > 0:
-                    marg    = getattr(config, "OCR_MARCIA_ETA_MARGINE_S", 5)
+                    marg = getattr(config, "OCR_MARCIA_ETA_MARGINE_S", 5)
                     att_min = getattr(config, "OCR_MARCIA_ETA_MIN_S", 8)
-                    attesa  = int(min(BLACKLIST_ATTESA_NODO, max(att_min, eta_prev + marg)))
-                    log(f"Attendo {attesa}s in mappa pulita (ETA={int(eta_prev)}s + margine={int(marg)}s)")
+                    attesa = int(min(BLACKLIST_ATTESA_NODO, max(att_min, eta_prev + marg)))
+                    log(f"Cooldown tipo '{tipo}': {attesa}s (ETA={int(eta_prev)}s + margine={int(marg)}s)")
                 else:
                     attesa = BLACKLIST_ATTESA_NODO
-                    log(f"Attendo {attesa}s in mappa pulita (ETA nodo non disponibile - TTL fisso)")
-
-            # Torna in mappa pulita prima di attendere —
-            # chiude popup coordinate e lente, evita UI sporca durante il wait
+                    log(f"Cooldown tipo '{tipo}': {attesa}s (ETA nodo non disponibile - TTL fisso)")
+            if isinstance(cooldown_map, dict):
+                cooldown_map[tipo] = time.time() + attesa
             adb.keyevent(porta, "KEYCODE_BACK")
-            time.sleep(0.5)
-            s_att, _ = stato.rileva(porta)
-            if s_att not in ("mappa", "home"):
-                stato.back_rapidi_e_stato(porta, n=3, logger=logger, nome=nome)
-            time.sleep(attesa)
-
-            # Terzo CERCA da stato pulito
-            _cerca_nodo(porta, tipo, coords)
-            chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 3, logger)
-
-            if chiave_nodo == chiave_primo or chiave_nodo is None:
-                log(f"Nodo ({chiave_primo}) ancora bloccato dopo attesa - abbandono tipo {tipo}")
-                debug.salva_screen(screen_nodo, nome, "fase3_blacklist_bloccato", squadra, tentativo, chiave_primo)
-                adb.keyevent(porta, "KEYCODE_BACK")
-                time.sleep(0.4)
-                return None, True, False, None, False
+            time.sleep(0.4)
+            return None, False, False, None, False, attesa
 
         if chiave_nodo and _blacklist_pulisci_e_verifica(blacklist, blacklist_lock, chiave_nodo):
             log(f"Anche il nuovo nodo ({cx},{cy}) è in blacklist - abbandono")
             adb.keyevent(porta, "KEYCODE_BACK")
             time.sleep(0.4)
-            return None, True, False, None, False
+            return None, True, False, None, False, 0
 
     log(f"[FASE4] Nodo ({cx},{cy}) libero - tap nodo")
     adb.tap(porta, _nodo_coord)
@@ -486,6 +579,22 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
     screen_popup = adb.screenshot(porta)
     debug.salva_screen(screen_popup, nome, "fase4_popup_raccogli", squadra, tentativo, f"{cx}_{cy}")
 
+    # --- Controllo livello nodo ---
+    # Scarta nodi con livello < NODO_LIVELLO_MIN (default 6) indipendentemente dal territorio.
+    # Un nodo Lv.5 dà meno risorse anche se in territorio — non vale la pena raccoglierlo.
+    if screen_popup:
+        _livello = _leggi_livello_nodo(screen_popup)
+        if _livello != -1 and _livello < NODO_LIVELLO_MIN:
+            log(f"Nodo ({cx},{cy}) livello {_livello} < {NODO_LIVELLO_MIN} — scarto")
+            debug.salva_screen(screen_popup, nome, "fase4_livello_basso", squadra, tentativo, f"{cx}_{cy}_lv{_livello}")
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.4)
+            _blacklist_commit(blacklist, blacklist_lock, chiave_nodo, eta_s=None)
+            log(f"Nodo ({cx},{cy}) aggiunto a blacklist (livello basso Lv.{_livello})")
+            return chiave_nodo, True, False, None, True, 0
+        elif _livello != -1:
+            log(f"Nodo ({cx},{cy}) livello Lv.{_livello} ✓")
+
     if screen_popup and not _nodo_in_territorio(screen_popup):
         log(f"Nodo ({cx},{cy}) FUORI territorio alleanza — scarto e cerco altro")
         debug.salva_screen(screen_popup, nome, "fase4_fuori_territorio", squadra, tentativo, f"{cx}_{cy}")
@@ -493,7 +602,7 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
         time.sleep(0.4)
         _blacklist_commit(blacklist, blacklist_lock, chiave_nodo, eta_s=None)
         log(f"Nodo ({cx},{cy}) aggiunto a blacklist (fuori territorio)")
-        return chiave_nodo, True, False, None, True
+        return chiave_nodo, True, False, None, True, 0
 
     _blacklist_reserve(blacklist, blacklist_lock, chiave_nodo)
     log(f"Nodo ({cx},{cy}) prenotato in blacklist (RESERVED)")
@@ -501,7 +610,7 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
     for t in range(1, config.MAX_TENTATIVI_RACCOLTA + 1):
         ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, t, logger, coords)
         if ok:
-            return chiave_nodo, False, True, eta_s, False
+            return chiave_nodo, False, True, eta_s, False, 0
 
         log(f"MARCIA fallita (tentativo {t}/{config.MAX_TENTATIVI_RACCOLTA}) - recovery UI")
         # Recovery robusta: la maschera truppe/marcia può avere 2-3 livelli aperti.
@@ -512,12 +621,12 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
             log("Recovery: in home - riporto in mappa prima del prossimo tentativo")
             if not stato.vai_in_mappa(porta, nome, logger):
                 log("Recovery: impossibile tornare in mappa - abbandono")
-                return chiave_nodo, False, False, None, False
+                return chiave_nodo, False, False, None, False, 0
         elif s_rec not in ("mappa", "home"):
             log(f"Recovery: stato '{s_rec}' - reset completo")
             _reset_stato(porta, nome, "", squadra, t, 0, logger)
 
-    return chiave_nodo, False, False, None, False
+    return chiave_nodo, False, False, None, False, 0
 
 
 # ------------------------------------------------------------------------------
@@ -535,6 +644,7 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     # Costruisce coordinate UI per questa istanza (risolve layout barra)
     from coords import UICoords
     coords = UICoords.da_ist(ist) if ist is not None else UICoords.da_ist({"nome": nome, "layout": 1, "lingua": "it"})
+    _livello_ist = int(ist.get("livello", config.LIVELLO_RACCOLTA)) if ist else config.LIVELLO_RACCOLTA
 
     log("Inizio raccolta risorse")
     _status.istanza_raccolta(nome)
@@ -584,18 +694,29 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
         # Il contatore X/Y appare circa 1.5-2s dopo che la mappa è visibile.
         time.sleep(2.0)
 
-    # Leggi risorse deposito — retry se almeno una risorsa principale non è leggibile.
-    # Causa tipica: barra non ancora renderizzata dopo vai_in_mappa, oppure
-    # banner/popup che copre momentaneamente un'icona.
+    # Leggi risorse deposito — retry con backoff se almeno una risorsa principale
+    # non è leggibile. Causa tipica: barra non ancora renderizzata dopo vai_in_mappa,
+    # banner evento o animazione di transizione che copre temporaneamente un'icona.
+    # Backoff: 2s → 3s → 4s (max 3 retry). Ogni tentativo fa nuovo screenshot.
     _RISORSE_PRINCIPALI = ("pomodoro", "legno", "acciaio", "petrolio")
+    _RETRY_DELAYS = (2.0, 3.0, 4.0)
     screen = adb.screenshot(porta)
     risorse = ocr.leggi_risorse(screen)
     _fallite = [r for r in _RISORSE_PRINCIPALI if risorse.get(r, -1) < 0]
-    if _fallite:
-        log(f"OCR risorse: {', '.join(_fallite)} non lette - riprovo tra 2s...")
-        time.sleep(2.0)
+    for _retry_i, _delay in enumerate(_RETRY_DELAYS):
+        if not _fallite:
+            break
+        log(f"OCR risorse: {', '.join(_fallite)} non lette - riprovo tra {_delay:.0f}s (tentativo {_retry_i + 1}/{len(_RETRY_DELAYS)})...")
+        time.sleep(_delay)
         screen = adb.screenshot(porta)
-        risorse = ocr.leggi_risorse(screen)
+        _nuove = ocr.leggi_risorse(screen)
+        # Aggiorna solo le risorse ancora mancanti, preserva quelle già lette
+        for _r in list(_fallite):
+            if _nuove.get(_r, -1) >= 0:
+                risorse[_r] = _nuove[_r]
+        _fallite = [r for r in _RISORSE_PRINCIPALI if risorse.get(r, -1) < 0]
+    if _fallite:
+        log(f"OCR risorse: {', '.join(_fallite)} ancora non lette dopo {len(_RETRY_DELAYS)} retry — procedo con dati parziali")
 
     pomodoro = risorse.get("pomodoro", -1)
     legno    = risorse.get("legno",    -1)
@@ -653,6 +774,7 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     fallimenti_cons = 0
     MAX_FALLIMENTI = 3
     tipi_bloccati = set()
+    cooldown_tipo_fino = {}  # Step2: cooldown per tipo (evita attese bloccanti su nodo riproposto)
 
     attive_correnti = attive_inizio
     idx_seq = 0
@@ -668,6 +790,19 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
 
     while attive_correnti < obiettivo and iter_n < max_iter:
         iter_n += 1
+        # Step2A: se ci sono slot da riempire ma tutti i tipi disponibili sono in cooldown, attendo fino al primo cooldown che scade
+        tipi_disponibili = [t for t in _tutti_i_tipi if t not in tipi_bloccati]
+        if tipi_disponibili:
+            now = time.time()
+            pronti = [t for t in tipi_disponibili if cooldown_tipo_fino.get(t, 0) <= now]
+            if not pronti:
+                t_min = min(cooldown_tipo_fino.get(t, now + BLACKLIST_ATTESA_NODO) for t in tipi_disponibili)
+                wait_s = int(max(1, min(BLACKLIST_ATTESA_NODO, t_min - now)))
+                log(f"Tutti i tipi disponibili in cooldown — attendo {wait_s}s")
+                # torna in mappa pulita prima di attendere, evita overlay persistenti
+                stato.back_rapidi_e_stato(porta, n=3, logger=logger, nome=nome)
+                time.sleep(wait_s)
+                continue
 
         # Se tutti i tipi pianificati sono bloccati, prova i tipi non pianificati
         # prima di arrendersi — obiettivo è sempre riempire tutti gli slot.
@@ -687,6 +822,10 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
 
         tipo = sequenza[idx_seq % len(sequenza)]
         idx_seq += 1
+        # Step2: se il tipo è in cooldown, salto e provo il prossimo
+        fino = cooldown_tipo_fino.get(tipo)
+        if fino and time.time() < fino:
+            continue
 
         if tipo in tipi_bloccati:
             continue  # skip silenzioso — il log "bloccato" è già stato emesso
@@ -698,12 +837,17 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
         squadra_n = attive_correnti + 1
         log(f"Invio squadra (attive={attive_correnti}/{obiettivo}) -> {tipo} (fallimenti cons: {fallimenti_cons}/{MAX_FALLIMENTI})")
 
-        chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio = _tap_invia_squadra(
+        chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio, cooldown_s = _tap_invia_squadra(
             porta, tipo, n_truppe, nome, squadra_n, 1, ciclo,
             logger=logger, blacklist=blacklist, blacklist_lock=blacklist_lock,
             coords=coords,
+            cooldown_map=cooldown_tipo_fino,
+            livello_target=_livello_ist,
         )
 
+        # Step2: se è stato impostato un cooldown (nodo riproposto), proseguo senza penalità
+        if cooldown_s and cooldown_s > 0:
+            continue
         if nodo_bloccato:
             if fuori_territorio:
                 # Nodo fuori territorio: il CERCA del gioco ripropone sempre
@@ -796,6 +940,7 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     # nel loop principale abbiamo già provato i tipi alternativi, ma se
     # il contatore era sbagliato potremmo avere slot liberi non sfruttati.
     attive_reali = attive_correnti
+    early_exit_slot_pieni = False  # Step1: evita coda home↔mappa quando slot sono già pieni
     if fallimenti_cons < MAX_FALLIMENTI:
         try:
             if stato.vai_in_mappa(porta, nome, logger):
@@ -814,19 +959,40 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
                         seq_recupero = (tipi_recupero * (libere_lette + 3))[:libere_lette * 3 + 3]
                         idx_rec = 0
                         while attive_correnti < obiettivo and idx_rec < len(seq_recupero):
+                            # Step2A: se tutti i tipi di recupero sono in cooldown, attendo fino al primo cooldown che scade
+                            tipi_rec = [t for t in seq_recupero[idx_rec:] if t not in tipi_bloccati]
+                            if tipi_rec:
+                                now = time.time()
+                                pronti = [t for t in tipi_rec if cooldown_tipo_fino.get(t, 0) <= now]
+                                if not pronti:
+                                    t_min = min(cooldown_tipo_fino.get(t, now + BLACKLIST_ATTESA_NODO) for t in tipi_rec)
+                                    wait_s = int(max(1, min(BLACKLIST_ATTESA_NODO, t_min - now)))
+                                    log(f"Recupero: tutti i tipi in cooldown — attendo {wait_s}s")
+                                    stato.back_rapidi_e_stato(porta, n=3, logger=logger, nome=nome)
+                                    time.sleep(wait_s)
+                                    continue
                             tipo = seq_recupero[idx_rec]
                             idx_rec += 1
+                            # Step2: se il tipo è in cooldown, salto e provo il prossimo
+                            fino = cooldown_tipo_fino.get(tipo)
+                            if fino and time.time() < fino:
+                                continue
                             if tipo in tipi_bloccati:
                                 continue
                             if fallimenti_cons >= MAX_FALLIMENTI:
                                 break
                             squadra_n = attive_correnti + 1
                             log(f"Invio squadra (attive={attive_correnti}/{obiettivo}) -> {tipo} (recupero)")
-                            chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio = _tap_invia_squadra(
+                            chiave_nodo, nodo_bloccato, marcia_tentata, eta_s, fuori_territorio, cooldown_s = _tap_invia_squadra(
                                 porta, tipo, n_truppe, nome, squadra_n, 1, ciclo,
                                 logger=logger, blacklist=blacklist, blacklist_lock=blacklist_lock,
                                 coords=coords,
+                                cooldown_map=cooldown_tipo_fino,
+                                livello_target=_livello_ist,
                             )
+                            # Step2: se è stato impostato un cooldown (nodo riproposto), proseguo senza penalità
+                            if cooldown_s and cooldown_s > 0:
+                                continue
                             if nodo_bloccato:
                                 tipi_bloccati.add(tipo)
                                 if not fuori_territorio:
@@ -858,20 +1024,25 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
                         stato.vai_in_home(porta, nome, logger)
                     else:
                         log(f"Contatore reale: {attive_reali}/{obiettivo} — slot pieni")
-                        stato.vai_in_home(porta, nome, logger)
+                        # Step1: slot pieni → evita ulteriori transizioni home↔mappa (risparmio ~30s/istanza)
+                        early_exit_slot_pieni = True
+                        attive_correnti = attive_reali
         except Exception as _ex:
             log(f"Verifica contatore reale fallita (non bloccante): {_ex}")
 
-    # Rileggi contatore per il log finale
-    try:
-        if stato.vai_in_mappa(porta, nome, logger):
-            time.sleep(1.5)
-            attive_lette2, _, _ = stato.conta_squadre(porta, n_letture=3)
-            if attive_lette2 != -1:
-                attive_reali = attive_lette2
-            stato.vai_in_home(porta, nome, logger)
-    except Exception:
-        pass
+    # Step1: se slot pieni già confermati, evita ulteriori transizioni mappa/home
+    if not early_exit_slot_pieni:
+
+        # Rileggi contatore per il log finale
+        try:
+            if stato.vai_in_mappa(porta, nome, logger):
+                time.sleep(1.5)
+                attive_lette2, _, _ = stato.conta_squadre(porta, n_letture=3)
+                if attive_lette2 != -1:
+                    attive_reali = attive_lette2
+                stato.vai_in_home(porta, nome, logger)
+        except Exception:
+            pass
 
     log(f"Raccolta completata - {inviate}/{obiettivo - attive_inizio} squadre inviate (attive finali={attive_reali}/{obiettivo})")
     _log.registra_evento(ciclo, nome, "completata", dettaglio=f"inviate={inviate} attive_finali={attive_reali}/{obiettivo}")

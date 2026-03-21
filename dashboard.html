@@ -187,6 +187,28 @@
   .ist-table input[type=number] { width: 60px; background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 5px; font-family: var(--mono); font-size: 11px; text-align: right; }
   .ist-table input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
   .ist-table select { background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 4px; font-family: var(--mono); font-size: 11px; }
+
+  /* ── PRODUZIONE ORARIA ── */
+  .ph-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .ph-title { font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; }
+  .ph-total { font-family: var(--sans); font-size: 28px; font-weight: 700; color: var(--green); line-height: 1; margin-bottom: 2px; }
+  .ph-total-lbl { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 10px; }
+  .ph-res-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
+  .ph-res-row .ico { font-size: 13px; flex-shrink: 0; margin-right: 6px; }
+  .ph-res-row .lbl { flex: 1; color: var(--text-dim); font-size: 10px; }
+  .ph-val-curr { color: var(--green); font-weight: bold; font-family: var(--sans); font-size: 13px; min-width: 60px; text-align: right; }
+  .ph-val-avg  { color: var(--text-mid); font-size: 10px; min-width: 55px; text-align: right; }
+  .ph-sep { height: 1px; background: var(--border); margin: 6px 0; }
+  .ph-legend { display: flex; gap: 12px; margin-top: 6px; font-size: 9px; color: var(--text-dim); }
+  .ph-legend span { display: flex; align-items: center; gap: 4px; }
+  .ph-legend .dot-curr { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .ph-legend .dot-avg  { width: 6px; height: 6px; border-radius: 50%; background: var(--text-mid); }
+
+  /* Produzione oraria nella card istanza */
+  .ph-inst-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px; }
+  .ph-inst-row .lbl { color: var(--text-dim); }
+  .ph-inst-curr { color: var(--green); font-weight: bold; }
+  .ph-inst-avg  { color: var(--text-mid); font-size: 10px; }
 </style>
 </head>
 <body>
@@ -233,7 +255,7 @@
       <table class="storico-table">
         <thead>
           <tr>
-            <th>Ciclo</th><th>Ora</th><th>Squadre</th><th>Durata</th><th>Sq/h</th><th>Produzione</th><th>Inviato <span class="dooms-account-lbl">—</span></th>
+            <th>Ciclo</th><th>Ora</th><th>Squadre</th><th>Durata</th><th>Sq/h</th><th>Produzione</th><th>M/h</th><th>Inviato <span class="dooms-account-lbl">—</span></th>
           </tr>
         </thead>
         <tbody id="storicoBody">
@@ -268,6 +290,20 @@
         <div class="sidebar-res-row"><span class="ico">⚙️</span><span style="flex:1;color:var(--text-dim);font-size:10px">Acciaio</span><span class="val" id="aggAcciaio">—</span><span class="sub" id="aggAcciaioCnt"></span></div>
         <div class="sidebar-res-row"><span class="ico">🛢️</span><span style="flex:1;color:var(--text-dim);font-size:10px">Petrolio</span><span class="val" id="aggPetrolio">—</span><span class="sub" id="aggPetrolioCnt"></span></div>
         <div class="sidebar-res-row"><span class="ico">💎</span><span style="flex:1;color:var(--text-dim);font-size:10px">Diamanti</span><span class="val" id="aggDiamanti">—</span><span class="sub" id="aggDiamantiCnt"></span></div>
+      </div>
+    </div>
+
+    <!-- Produzione oraria aggregata -->
+    <div class="ph-card" id="phCard" style="display:none">
+      <div class="ph-title">⚡ Produzione oraria</div>
+      <div class="ph-total" id="phTotaleCurr">—</div>
+      <div class="ph-total-lbl">M/h totale ciclo corrente</div>
+      <div class="ph-sep"></div>
+      <div id="phResRows"></div>
+      <div class="ph-sep"></div>
+      <div class="ph-legend">
+        <span><span class="dot-curr"></span> Ciclo corrente</span>
+        <span><span class="dot-avg"></span> Media storica</span>
       </div>
     </div>
 
@@ -319,7 +355,7 @@
     <div style="overflow-x:auto">
       <table class="ist-table">
         <thead><tr>
-          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th>
+          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th><th>Lv.</th>
         </tr></thead>
         <tbody id="rt_ist_tbody"></tbody>
       </table>
@@ -371,6 +407,79 @@ function fmtM(v) {
   return v.toFixed(1) + "M";
 }
 
+// ── PRODUZIONE ORARIA ──────────────────────────────────────────────────────
+// Calcola M/h per ogni risorsa a partire da produzione ciclo e durata ciclo.
+// produzione: dict {pomodoro, legno, acciaio, petrolio} in M
+// durata_s:   durata ciclo in secondi (da timing.dur_totale_s)
+// Ritorna dict con stessi key, valori in M/h, oppure -1 se non calcolabile.
+function calcPhDaCiclo(produzione, durata_s) {
+  const out = {};
+  if (!produzione || !durata_s || durata_s <= 0) {
+    RES_KEYS.forEach(k => out[k] = -1);
+    return out;
+  }
+  const ore = durata_s / 3600;
+  RES_KEYS.forEach(k => {
+    const v = produzione[k] ?? -1;
+    out[k] = (v >= 0 && ore > 0) ? v / ore : -1;
+  });
+  return out;
+}
+
+// Media M/h dagli ultimi N cicli dello storico.
+// storico_cicli: array di {produzione:{...}, durata_m: float}
+// Ritorna dict {pomodoro, legno, acciaio, petrolio} in M/h medi.
+function calcPhStorico(storico_cicli, n_cicli = 10) {
+  const out = {};
+  RES_KEYS.forEach(k => out[k] = -1);
+  if (!storico_cicli || storico_cicli.length === 0) return out;
+
+  const ultimi = storico_cicli.slice(-n_cicli);
+  const somme  = {}; const conti = {};
+  RES_KEYS.forEach(k => { somme[k] = 0; conti[k] = 0; });
+
+  ultimi.forEach(c => {
+    const ore = (c.durata_m ?? 0) / 60;
+    if (ore <= 0) return;
+    const prod = c.produzione || {};
+    RES_KEYS.forEach(k => {
+      const v = prod[k] ?? -1;
+      if (v >= 0) { somme[k] += v / ore; conti[k]++; }
+    });
+  });
+
+  RES_KEYS.forEach(k => {
+    out[k] = conti[k] > 0 ? somme[k] / conti[k] : -1;
+  });
+  return out;
+}
+
+function fmtPh(v) {
+  if (v === undefined || v === null || v < 0) return "—";
+  return v.toFixed(1) + "M/h";
+}
+
+function hmsToSec(ts) {
+ if (!ts || typeof ts !== "string") return null;
+ const m = ts.match(/^(\d{2}):(\d{2}):(\d{2})$/);
+ if (!m) return null;
+ return (+m[1])*3600 + (+m[2])*60 + (+m[3]);
+}
+
+function diffHms(a,b) {
+ const sa = hmsToSec(a), sb = hmsToSec(b);
+ if (sa === null || sb === null) return -1;
+ let d = sb - sa;
+ if (d < 0) d += 24*3600;
+ return d;
+}
+
+function fmtDur(sec) {
+ if (sec === undefined || sec === null || sec < 0) return "—";
+ sec = Math.floor(sec);
+ const m=Math.floor(sec/60), s=sec%60;
+ return (m>0? (m+"m ") : "") + s + "s";
+}
 function fmtProd(v) {
   if (v === undefined || v === null || v < 0) return { txt:"—", cls:"prod-na" };
   if (v === 0) return { txt:"0.0M", cls:"prod-na" };
@@ -457,6 +566,69 @@ function aggiorna(data) {
   document.getElementById("aggDiamanti").textContent  = diaCnt>0 ? diaSum.toLocaleString("it-IT") : "—";
   document.getElementById("aggDiamantiCnt").textContent = diaCnt>0 ? `${diaCnt}/${Object.keys(istanze).length} istanze` : "nessun dato";
 
+  // ── Produzione oraria sidebar ──
+  // Ciclo corrente: somma produzioni istanze / media durate
+  const storicoCicli = data.storico_cicli || [];
+  const phStorico = calcPhStorico(storicoCicli, 10);
+
+  // Calcola ph corrente sommando le produzioni di tutte le istanze
+  // e dividendo per la media delle durate disponibili
+  const phCurrSomme = {}; let phCurrDurate = 0, phCurrDurateCnt = 0;
+  RES_KEYS.forEach(k => phCurrSomme[k] = -1);
+  for (const n in istanze) {
+    const ist = istanze[n];
+    const dur = ist.timing?.dur_totale_s ?? 0;
+    if (dur > 0) { phCurrDurate += dur; phCurrDurateCnt++; }
+    const prod = ist.produzione || {};
+    RES_KEYS.forEach(k => {
+      const v = prod[k] ?? -1;
+      if (v >= 0) phCurrSomme[k] = (phCurrSomme[k] < 0 ? 0 : phCurrSomme[k]) + v;
+    });
+  }
+  const phCurrDurMedia = phCurrDurateCnt > 0 ? phCurrDurate / phCurrDurateCnt : 0;
+  const phCurr = {};
+  RES_KEYS.forEach(k => {
+    const v = phCurrSomme[k];
+    phCurr[k] = (v >= 0 && phCurrDurMedia > 0) ? v / (phCurrDurMedia / 3600) : -1;
+  });
+
+  // Totale aggregato M/h corrente
+  const phCurrTot = RES_KEYS.reduce((s, k) => phCurr[k] >= 0 ? s + phCurr[k] : s, 0);
+  const phStorTot = RES_KEYS.reduce((s, k) => phStorico[k] >= 0 ? s + phStorico[k] : s, 0);
+
+  const hasPh = RES_KEYS.some(k => phCurr[k] >= 0 || phStorico[k] >= 0);
+  const phCard = document.getElementById("phCard");
+  phCard.style.display = hasPh ? "" : "none";
+  if (hasPh) {
+    document.getElementById("phTotaleCurr").textContent =
+      phCurrTot > 0 ? phCurrTot.toFixed(1) + " M/h" : "—";
+    const icons = { pomodoro:"🍅", legno:"🪵", acciaio:"⚙️", petrolio:"🛢️" };
+    const labels = { pomodoro:"Pomodoro", legno:"Legno", acciaio:"Acciaio", petrolio:"Petrolio" };
+    let rowsHtml = "";
+    RES_KEYS.forEach(k => {
+      const vc = phCurr[k], vs = phStorico[k];
+      if (vc < 0 && vs < 0) return;
+      rowsHtml += `
+        <div class="ph-res-row">
+          <span class="ico">${icons[k]}</span>
+          <span class="lbl">${labels[k]}</span>
+          <span class="ph-val-curr">${vc >= 0 ? vc.toFixed(1)+"M/h" : "—"}</span>
+          <span class="ph-val-avg">${vs >= 0 ? "~"+vs.toFixed(1)+"M/h" : ""}</span>
+        </div>`;
+    });
+    // Riga totale storico
+    if (phStorTot > 0) {
+      rowsHtml += `
+        <div class="ph-sep"></div>
+        <div class="ph-res-row">
+          <span class="ico">📊</span>
+          <span class="lbl" style="color:var(--text-mid)">Totale medio storico</span>
+          <span class="ph-val-avg" style="font-size:12px;color:var(--text-mid)">~${phStorTot.toFixed(1)}M/h</span>
+        </div>`;
+    }
+    document.getElementById("phResRows").innerHTML = rowsHtml;
+  }
+
   // Inviato account destinatario aggregato (ciclo corrente)
   const invIds  = ["invPomodoro","invLegno","invAcciaio","invPetrolio"];
   const invCIds = ["invPomodoroCnt","invLegnoCnt","invAcciaioCnt","invPetrolioCnt"];
@@ -519,7 +691,24 @@ function aggiorna(data) {
       card.appendChild(d);
     }
 
-    // ── Deposito attuale ──
+    // ── Tempi ciclo (metriche ridotte — SOLO DURATE) ──
+ const t = ist.timing || {};
+ const dBoot = diffHms(t.ts_avvio_istanza || ist.ts_inizio, t.ts_avvio_gioco);
+ const dReady = diffHms(t.ts_avvio_gioco, t.ts_gioco_pronto);
+ const hasTiming = (dBoot >= 0 || dReady >= 0 || (t.dur_raccolta_s||0) > 0 || (t.dur_chiusura_s||0) > 0 || (t.dur_totale_s||0) > 0);
+ if (hasTiming) {
+   const sec = document.createElement("div");
+   sec.className = "sub-section";
+   sec.innerHTML = `<div class="sub-title">Tempi ciclo</div>` +
+     `<div class="instance-row"><span>Avvio gioco</span><span>${fmtDur(dBoot)}</span></div>` +
+     `<div class="instance-row"><span>Gioco pronto</span><span>${fmtDur(dReady)}</span></div>` +
+     `<div class="instance-row"><span>Raccolta</span><span>${fmtDur(t.dur_raccolta_s)} (inviate: ${ist.squadre_inviate||0})</span></div>` +
+     `<div class="instance-row"><span>Chiusura</span><span>${fmtDur(t.dur_chiusura_s)}</span></div>` +
+     `<div class="instance-row"><span>Totale</span><span>${fmtDur(t.dur_totale_s)}</span></div>`;
+   card.appendChild(sec);
+ }
+
+// ── Deposito attuale ──
     const hasRis = RES_KEYS.some(k => ist[k]!==undefined && ist[k]>=0) || (ist.diamanti??-1)>=0;
     if (hasRis) {
       const sec = document.createElement("div");
@@ -572,6 +761,30 @@ function aggiorna(data) {
       sec.appendChild(pg); card.appendChild(sec);
     }
 
+    // ── Produzione oraria per istanza ──
+    const durSec = ist.timing?.dur_totale_s ?? 0;
+    const phIst  = calcPhDaCiclo(prod, durSec);
+    // Media storica per questa istanza: cerca nei cicli storici (non disponibile per istanza,
+    // usiamo la media globale già calcolata come riferimento)
+    const hasPhIst = hasProd && durSec > 0 && RES_KEYS.some(k => phIst[k] >= 0);
+    if (hasPhIst) {
+      const sec = document.createElement("div");
+      sec.className = "sub-section";
+      sec.innerHTML = `<div class="sub-title">⚡ Produzione oraria (ciclo corrente)</div>`;
+      const pg = document.createElement("div");
+      pg.className = "prod-grid";
+      let totPh = 0;
+      RES_KEYS.forEach(k => {
+        if (phIst[k] < 0) return;
+        totPh += phIst[k];
+        pg.innerHTML += `<div class="ph-inst-row"><span class="lbl">${RES_ICO[k]} ${k}</span><span class="ph-inst-curr">${phIst[k].toFixed(1)}M/h</span></div>`;
+      });
+      if (totPh > 0) {
+        pg.innerHTML += `<div class="ph-inst-row" style="margin-top:3px;border-top:1px solid var(--border);padding-top:3px"><span class="lbl" style="color:var(--text-mid)">Totale</span><span class="ph-inst-curr">${totPh.toFixed(1)}M/h</span></div>`;
+      }
+      sec.appendChild(pg); card.appendChild(sec);
+    }
+
     // ── Inviato FauMorfeus ──
     // res_inviato = ciclo corrente in accumulo
     // res_inviato_prec = ciclo precedente confermato (usato per calcolo produzione)
@@ -615,7 +828,7 @@ function aggiorna(data) {
   const storico = (data.storico_cicli || []).slice(-10);
   const tbody   = document.getElementById("storicoBody");
   if (storico.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="dim" style="padding:12px 14px">Nessun ciclo completato</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="dim" style="padding:12px 14px">Nessun ciclo completato</td></tr>';
   } else {
     tbody.innerHTML = "";
     [...storico].reverse().forEach(c => {
@@ -627,6 +840,20 @@ function aggiorna(data) {
         if (v===undefined || v<0) return;
         prodHtml += `<span>${RES_ICO[k]} <b style="color:var(--green)">${v.toFixed(1)}M</b></span>`;
       });
+      // Calcola M/h per questo ciclo
+      const durSec = (c.durata_m ?? 0) * 60;
+      const phCiclo = calcPhDaCiclo(prod, durSec);
+      const phTot = RES_KEYS.reduce((s, k) => phCiclo[k] >= 0 ? s + phCiclo[k] : s, 0);
+      let phHtml = "";
+      if (phTot > 0) {
+        phHtml = `<span style="color:var(--green);font-weight:bold">${phTot.toFixed(1)}M/h</span>`;
+        // dettaglio per risorsa in piccolo
+        const det = RES_KEYS.filter(k => phCiclo[k] >= 0)
+          .map(k => `${RES_ICO[k]}${phCiclo[k].toFixed(1)}`).join(" ");
+        phHtml += `<br><span style="font-size:9px;color:var(--text-dim)">${det}</span>`;
+      } else {
+        phHtml = '<span style="color:var(--text-dim)">—</span>';
+      }
       const tr = document.createElement("tr");
       // Inviato aggregato ciclo
       const inv = c.inviato || {};
@@ -643,6 +870,7 @@ function aggiorna(data) {
         <td class="dim">${c.durata_m} min</td>
         <td class="blue">${sqH}/h</td>
         <td class="prod-cell">${prodHtml||'<span style="color:var(--text-dim)">—</span>'}</td>
+        <td class="prod-cell">${phHtml}</td>
         <td class="prod-cell">${invHtml||'<span style="color:var(--text-dim)">—</span>'}</td>`;
       tbody.appendChild(tr);
     });
@@ -718,6 +946,7 @@ function rtCaricaIstanze() {
     const truppe      = ovr.truppe      !== undefined ? ovr.truppe      : (ist.truppe      ?? 12000);
     const max_squadre = ovr.max_squadre !== undefined ? ovr.max_squadre : (ist.max_squadre ?? 4);
     const layout      = ovr.layout      !== undefined ? ovr.layout      : (ist.layout      ?? 1);
+    const livello     = ovr.livello     !== undefined ? ovr.livello     : (ist.livello     ?? 6);
     const lingua      = ist.lingua ?? "it";
 
     const tr = document.createElement("tr");
@@ -734,6 +963,11 @@ function rtCaricaIstanze() {
       <td><select data-field="layout">
         <option value="1" ${layout==1?"selected":""}>1</option>
         <option value="2" ${layout==2?"selected":""}>2</option>
+      </select></td>
+      <td><select data-field="livello">
+        <option value="5" ${livello==5?"selected":""}>5</option>
+        <option value="6" ${livello==6?"selected":""}>6</option>
+        <option value="7" ${livello==7?"selected":""}>7</option>
       </select></td>`;
 
     // Toggle visivo opacity al cambio checkbox
@@ -823,6 +1057,7 @@ async function rtSalvaIstanze() {
     const truppe      = +(tr.querySelector('[data-field="truppe"]')?.value      ?? ist.truppe);
     const max_squadre = +(tr.querySelector('[data-field="max_squadre"]')?.value ?? ist.max_squadre);
     const layout      = +(tr.querySelector('[data-field="layout"]')?.value      ?? ist.layout);
+    const livello     = +(tr.querySelector('[data-field="livello"]')?.value     ?? (ist.livello ?? 6));
 
     // Costruisci delta: solo i campi che differiscono dal default config.py
     const delta = {};
@@ -830,11 +1065,13 @@ async function rtSalvaIstanze() {
     const cfg_truppe      = ist.truppe      ?? 12000;
     const cfg_max_squadre = ist.max_squadre ?? 4;
     const cfg_layout      = ist.layout      ?? 1;
+    const cfg_livello     = ist.livello     ?? 6;
 
     if (abilitata   !== cfg_abilitata)   delta.abilitata   = abilitata;
     if (truppe      !== cfg_truppe)      delta.truppe      = truppe;
     if (max_squadre !== cfg_max_squadre) delta.max_squadre = max_squadre;
     if (layout      !== cfg_layout)      delta.layout      = layout;
+    if (livello     !== cfg_livello)     delta.livello     = livello;
 
     if (Object.keys(delta).length > 0) {
       ovrs[nome] = { ...(ovrs[nome] || {}), ...delta };

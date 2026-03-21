@@ -10,6 +10,30 @@ Questo progetto nasce come **studio personale** sulle tecnologie di automazione 
 - **Nessuna garanzia**
 
 ---
+## ✅ Versione v5.18 (selezione livello nodo + produzione oraria dashboard)
+
+### Selezione livello nodo (`raccolta.py`)
+- **Livello nodo configurabile per istanza** (5/6/7) con default 6, modificabile dalla dashboard senza riavvio
+- Reset garantito: 6 tap su `—` portano sempre a Lv.1 indipendentemente dal livello dell'ultima ricerca
+- Coordinate assolute misurate su screenshot reali 960x540 per tutti i tipi — necessario perché il popup del petrolio è clamped al bordo destro dello schermo
+- OCR livello dal titolo popup nodo per scartare nodi sotto-livello (pattern IT/EN)
+- OCR risorse inizio ciclo: retry con backoff crescente 2s → 3s → 4s (era singolo retry fisso)
+
+### Livello per istanza (`config.py`)
+- Campo `"livello": 6` aggiunto a tutte le istanze BlueStacks e MuMuPlayer
+- Sovrascrivibile da `runtime.json` via dashboard senza modificare `config.py`
+
+### Dashboard produzione oraria (`dashboard.html`)
+- Nuovo pannello **Produzione oraria** in sidebar: M/h ciclo corrente + media storica ultimi 10 cicli
+- Produzione oraria visibile nella card di ogni istanza (tutte e 4 le risorse + totale M/h)
+- Nuova colonna M/h nello storico cicli
+- Colonna **Lv.** nella tabella runtime istanze con select 5/6/7
+
+### Backend (`dashboard_server.py`, `runtime.py`)
+- `config_istanze.json` espone il campo `livello` per BS e MuMu
+- `istanze_attive()` applica l'override `livello` da `runtime.json`
+
+---
 ## ✅ Versione v5.17 (fix raccolta + robustezza)
 
 ### Bug fix raccolta (`raccolta.py`)
