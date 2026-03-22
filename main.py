@@ -111,9 +111,15 @@ def _scegli_configurazione():
         print("  Configurazione runtime.json attuale:")
         print(f"    Istanze parallele : {g.get('ISTANZE_BLOCCO', '?')}")
         print(f"    Attesa cicli      : {g.get('WAIT_MINUTI', '?')} min")
-        print(f"    Alleanza          : {'ON' if g.get('ALLEANZA_ABILITATA', True) else 'OFF'}")
-        print(f"    Messaggi          : {'ON' if g.get('MESSAGGI_ABILITATI', True) else 'OFF'}")
-        print(f"    Rifornimento      : {'ON' if g.get('RIFORNIMENTO_ABILITATO', True) else 'OFF'}")
+        print(f"    Alliance Gifts    : {'ON' if g.get('ALLEANZA_ABILITATA', True) else 'OFF'}")
+        print(f"    Alliance Messages : {'ON' if g.get('MESSAGGI_ABILITATI', True) else 'OFF'}")
+        print(f"    VIP Daily Rewards : {'ON' if g.get('DAILY_VIP_ABILITATO', True) else 'OFF'}")
+        print(f"    Radar Show        : {'ON' if g.get('DAILY_RADAR_ABILITATO', True) else 'OFF'}")
+        print(f"    Supply Resources  : {'ON' if g.get('RIFORNIMENTO_ABILITATO', True) else 'OFF'}")
+        print(f"    Soglia 🍅 campo   : {g.get('RIFORNIMENTO_SOGLIA_CAMPO_M', 5.0)}M")
+        print(f"    Soglia 🪵 legno   : {g.get('RIFORNIMENTO_SOGLIA_LEGNO_M', 5.0)}M")
+        print(f"    Soglia 🛢 petrolio: {g.get('RIFORNIMENTO_SOGLIA_PETROLIO_M', 2.5)}M")
+        print(f"    Soglia ⚙ acciaio  : {g.get('RIFORNIMENTO_SOGLIA_ACCIAIO_M', 3.5)}M")
         ovr = rt_corrente.get("overrides", {})
         if ovr:
             print(f"    Overrides istanze : {list(ovr.keys())}")
@@ -207,6 +213,8 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
         # Acquisisce slot: se ISTANZE_BLOCCO già attive, aspetta qui
         semaforo.acquire()
         log.logger(nome, "Slot acquisito - avvio istanza")
+        try: status.istanza_avvio(nome)
+        except Exception: pass
 
         try:
             avviate = emulatore.avvia_blocco([ist], log.logger)
@@ -236,6 +244,8 @@ def esegui_ciclo_pool(istanze: list, ciclo: int) -> tuple:
             # Rilascia slot SEMPRE (anche in caso di eccezione)
             semaforo.release()
             log.logger(nome, "Slot rilasciato")
+            try: status.istanza_slot_rilasciato(nome)
+            except Exception: pass
 
     # Lancia un thread per ogni istanza; il semaforo controlla quante partono
     for ist in istanze:

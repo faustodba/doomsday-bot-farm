@@ -24,6 +24,7 @@ import time
 import adb
 import config
 import timing
+import status as _status
 
 # Nomi processo Multi Instance Manager (varianti secondo versione BlueStacks)
 _MIM_PROCESSES = [
@@ -236,6 +237,8 @@ def avvia_blocco(blocco_ist: list, logger=None) -> list:
                 connesse.add(porta)
                 if adb.avvia_gioco(porta):
                     if logger: logger(nome, "Gioco avviato")
+                try: _status.istanza_gioco_avviato(nome)
+                except Exception: pass
                 else:
                     if logger: logger(nome, "Errore avvio gioco")
                 avviate.append(ist)
@@ -299,6 +302,8 @@ def chiudi_istanza(ist: dict, logger=None):
     try:
         adb.ferma_gioco(porta)
         log("Gioco fermato")
+        try: _status.istanza_gioco_fermato(nome)
+        except Exception: pass
     except Exception as e:
         log(f"Errore ferma gioco: {e}")
     time.sleep(0.5)

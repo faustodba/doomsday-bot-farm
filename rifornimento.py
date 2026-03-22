@@ -1033,14 +1033,12 @@ def esegui_rifornimento(porta: str, nome: str,
         log("DOOMS_ACCOUNT non configurato - skip")
         return 0
 
-    # Soglie per risorsa — pomodoro/legno uguali, petrolio derivato dal
-    # rapporto target (18.75/37.5 × 5M = 2.5M), acciaio non si invia mai
-    _soglia_base = getattr(config, "RIFORNIMENTO_SOGLIA_M", SOGLIA_MIN_M)
+    # Soglie per risorsa — ognuna configurabile indipendentemente da runtime.json
     soglie = {
-        "pomodoro": _soglia_base,
-        "legno":    _soglia_base,
+        "pomodoro": getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M",    5.0),
+        "legno":    getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M",    5.0),
         "petrolio": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5),
-        "acciaio":  float("inf"),   # mai inviato
+        "acciaio":  getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M",  3.5),
     }
 
     # Quantità per spedizione da config (con fallback a default)

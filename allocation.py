@@ -7,11 +7,11 @@
 #    calcola la sequenza ottimale di tipi di nodo da raccogliere per
 #    mantenere il deposito bilanciato rispetto al rapporto target.
 #
-#  RAPPORTO TARGET (basato su quantità nodo livello 6):
-#    campo    (pomodoro) → 37.50%   (1.200.000 / nodo)
-#    segheria (legno)    → 37.50%   (1.200.000 / nodo)
-#    petrolio            → 18.75%   (  600.000 / nodo — invertito rispetto base)
-#    acciaio             →  6.25%   (  240.000 / nodo — invertito rispetto base)
+#  RAPPORTO TARGET (default — sovrascrivibile da runtime.json via dashboard):
+#    campo    (pomodoro) → 35.00%
+#    segheria (legno)    → 35.00%
+#    petrolio            → 18.75%
+#    acciaio             → 11.25%  (era 6.25%)
 #
 #  ALGORITMO GAP:
 #    1. Leggi percentuale attuale di ogni risorsa nel deposito
@@ -36,10 +36,12 @@ import math
 #   acciaio:  risorsa marginale
 # ------------------------------------------------------------------------------
 RATIO_TARGET = {
-    "campo":     0.3750,   # pomodoro — 37.50%
-    "segheria":  0.3750,   # legno    — 37.50%
+    "campo":     0.3500,   # pomodoro — 35.00%
+    "segheria":  0.3500,   # legno    — 35.00%
     "petrolio":  0.1875,   #          — 18.75%
-    "acciaio":   0.0625,   #          —  6.25%
+    "acciaio":   0.1125,   #          — 11.25%
+    # NOTA: questi valori vengono sovrascritti da runtime.json ad ogni ciclo
+    # tramite runtime.applica() — modificare dalla dashboard o da runtime.json
 }
 
 # Mappa tipo nodo → chiave deposito OCR
@@ -152,11 +154,14 @@ def calcola_sequenza(slot_liberi: int, deposito: dict) -> list:
 def _sequenza_default(slot_liberi: int) -> list:
     """
     Sequenza di default quando il deposito OCR non è disponibile.
-    Rispetta i pesi target con distribuzione uniforme:
-      campo, segheria, petrolio, campo, segheria → per 5 slot
+    Costruita proporzionalmente ai ratio target default:
+      campo 35% | segheria 35% | petrolio 18.75% | acciaio 11.25%
+    Su 16 slot: campo×6, segheria×6, petrolio×3, acciaio×2 (≈ ratio target)
     """
     base = ["campo", "segheria", "petrolio", "campo", "segheria",
-            "campo", "segheria", "petrolio", "acciaio", "campo"]
+            "acciaio", "campo", "segheria", "petrolio", "campo",
+            "segheria", "acciaio", "campo", "segheria", "petrolio",
+            "campo"]
     return base[:slot_liberi]
 
 

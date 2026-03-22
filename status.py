@@ -76,6 +76,27 @@ _stato = _carica_stato_iniziale()
 def _res_vuote() -> dict:
     return {k: -1.0 for k in _RES_KEYS}
 
+
+def _timing_default() -> dict:
+    """Struttura timing per dashboard (metriche ridotte)."""
+    return {
+        "ts_avvio_istanza": "",
+        "ts_avvio_gioco": "",
+        "ts_gioco_pronto": "",
+        "ts_fine_raccolta": "",
+        "ts_fine_istanza": "",
+        "dur_raccolta_s": 0,
+        "dur_chiusura_s": 0,
+        "dur_totale_s": 0,
+    }
+
+def _parse_hms(ts: str):
+    """Parsa HH:MM:SS in datetime di oggi (naive)."""
+    try:
+        t = datetime.strptime(ts, "%H:%M:%S").replace(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+        return t
+    except Exception:
+        return None
 def _res_from_raw(pomodoro, legno, acciaio=-1, petrolio=-1) -> dict:
     """Converte valori grezzi (unità intere) in milioni, -1 se assente."""
     def _conv(v):
@@ -121,17 +142,31 @@ def _calcola_produzione(ist: dict) -> dict:
     Produzione netta inter-ciclo:
       produzione = (res_inizio_corrente - res_inizio_ciclo_prec) + res_inviato_prec
 
-    - res_inizio_corrente  : lettura deposito all avvio del ciclo N+1
-    - res_inizio_ciclo_prec: lettura deposito all avvio del ciclo N
-    - res_inviato_prec     : risorse inviate a account destinatario durante il ciclo N
+    Calcola anche M/h usando il delta reale tra i timestamp delle due letture.
+    Se i timestamp non sono disponibili, M/h rimane -1.
 
-    Il delta cattura tutto quello che e entrato nel deposito tra i due cicli.
-    res_inviato_prec compensa quello che e uscito per il rifornimento.
     Ritorna -1 per ogni risorsa dove uno dei due snapshot non e disponibile.
     """
     delta   = _res_delta(ist.get("res_inizio_ciclo_prec", _res_vuote()),
                          ist.get("res_inizio",            _res_vuote()))
     inviato = ist.get("res_inviato_prec", _res_vuote())
+
+    # Calcola ore reali tra le due letture
+    ore_reali = -1.0
+    ts_prec = ist.get("ts_res_inizio_prec", "")
+    ts_curr = ist.get("ts_res_inizio", "")
+    if ts_prec and ts_curr:
+        try:
+            from datetime import datetime as _dt
+            fmt = "%Y-%m-%dT%H:%M:%S"
+            t0 = _dt.strptime(ts_prec, fmt)
+            t1 = _dt.strptime(ts_curr, fmt)
+            diff_s = (t1 - t0).total_seconds()
+            if diff_s > 60:  # minimo 1 minuto per evitare divisioni su gap anomali
+                ore_reali = diff_s / 3600
+        except Exception:
+            pass
+
     out = {}
     for k in _RES_KEYS:
         d = delta.get(k, -1)
@@ -140,6 +175,15 @@ def _calcola_produzione(ist: dict) -> dict:
             out[k] = round(d + (i if i >= 0 else 0), 2)
         else:
             out[k] = -1.0
+
+    # Aggiunge M/h per risorsa se il tempo reale è disponibile
+    mh = {}
+    for k in _RES_KEYS:
+        v = out.get(k, -1)
+        mh[k] = round(v / ore_reali, 2) if (v >= 0 and ore_reali > 0) else -1.0
+
+    out["_mh"]       = mh
+    out["_ore_reali"] = round(ore_reali, 3) if ore_reali > 0 else -1.0
     return out
 
 
@@ -157,8 +201,12 @@ def _istanza_default(nome: str) -> dict:
         "diamanti":        -1,
         # Snapshot inizio ciclo corrente
         "res_inizio":            _res_vuote(),
+        # Timestamp ISO lettura res_inizio ciclo corrente
+        "ts_res_inizio":         "",
         # Snapshot inizio ciclo PRECEDENTE — conservato da init_ciclo() per calcolo produzione
         "res_inizio_ciclo_prec": _res_vuote(),
+        # Timestamp ISO lettura res_inizio ciclo PRECEDENTE
+        "ts_res_inizio_prec":    "",
         # Snapshot fine ciclo (mantenuto per compatibilità)
         "res_fine":              _res_vuote(),
         # Risorse inviate a account destinatario nel ciclo CORRENTE (si accumula durante il ciclo)
@@ -173,6 +221,7 @@ def _istanza_default(nome: str) -> dict:
         "cnt_errati":      0,
         "ts_inizio":       "",
         "durata_s":        0,
+    "timing": _timing_default(),
         # Metadati per dashboard — preservati tra riavvii
         "dati_storici":    False,  # True = dati dall ultimo ciclo (bot fermo)
         "ts_ultimo_ciclo": "",     # "14/03 08:36" — quando sono stati aggiornati l ultima volta
@@ -220,6 +269,7 @@ def init_ciclo(ciclo: int, nomi_istanze: list):
             if ist_prec:
                 # Conserva snapshot inizio e inviato del ciclo precedente
                 ist_new["res_inizio_ciclo_prec"] = ist_prec.get("res_inizio", _res_vuote())
+                ist_new["ts_res_inizio_prec"]    = ist_prec.get("ts_res_inizio", "")
                 ist_new["res_inviato_prec"]      = ist_prec.get("res_inviato", _res_vuote())
                 # Mantieni ultimo valore risorse visibile in dashboard
                 for k in ("pomodoro", "legno", "acciaio", "petrolio", "diamanti"):
@@ -241,11 +291,61 @@ def istanza_avvio(nome: str):
         ist = _stato["istanze"].get(nome, _istanza_default(nome))
         ist["stato"]         = "avvio"
         ist["ts_inizio"]     = datetime.now().strftime("%H:%M:%S")
+        ist.setdefault("timing", _timing_default())
+        ist["timing"]["ts_avvio_istanza"] = ist["ts_inizio"]
         ist["dati_storici"]  = False   # l'istanza e' live da questo momento
         _stato["istanze"][nome] = ist
         _scrivi()
 
 
+
+def istanza_gioco_avviato(nome: str):
+    """Marca timestamp avvio gioco (app avviata)."""
+    with _lock:
+        ist = _stato["istanze"].get(nome, _istanza_default(nome))
+        ist.setdefault("timing", _timing_default())
+        ist["timing"]["ts_avvio_gioco"] = datetime.now().strftime("%H:%M:%S")
+        _stato["istanze"][nome] = ist
+        _scrivi()
+
+def istanza_gioco_pronto(nome: str):
+    """Marca timestamp gioco pronto (popup confermato)."""
+    with _lock:
+        ist = _stato["istanze"].get(nome, _istanza_default(nome))
+        ist.setdefault("timing", _timing_default())
+        ist["timing"]["ts_gioco_pronto"] = datetime.now().strftime("%H:%M:%S")
+        _stato["istanze"][nome] = ist
+        _scrivi()
+
+def istanza_gioco_fermato(nome: str):
+    """Marca timestamp fine raccolta/inizio chiusura (gioco fermato)."""
+    with _lock:
+        ist = _stato["istanze"].get(nome, _istanza_default(nome))
+        ist.setdefault("timing", _timing_default())
+        ist["timing"]["ts_fine_raccolta"] = datetime.now().strftime("%H:%M:%S")
+        _stato["istanze"][nome] = ist
+        _scrivi()
+
+def istanza_slot_rilasciato(nome: str):
+    """Marca timestamp fine istanza (slot rilasciato) e calcola durate."""
+    with _lock:
+        ist = _stato["istanze"].get(nome, _istanza_default(nome))
+        ist.setdefault("timing", _timing_default())
+        t = ist["timing"]
+        t["ts_fine_istanza"] = datetime.now().strftime("%H:%M:%S")
+        # durate (best-effort)
+        t0 = _parse_hms(t.get("ts_avvio_istanza", "") or ist.get("ts_inizio", ""))
+        t_ready = _parse_hms(t.get("ts_gioco_pronto", ""))
+        t_stop = _parse_hms(t.get("ts_fine_raccolta", ""))
+        t_end = _parse_hms(t.get("ts_fine_istanza", ""))
+        if t_ready and t_stop:
+            t["dur_raccolta_s"] = int((t_stop - t_ready).total_seconds())
+        if t_stop and t_end:
+            t["dur_chiusura_s"] = int((t_end - t_stop).total_seconds())
+        if t0 and t_end:
+            t["dur_totale_s"] = int((t_end - t0).total_seconds())
+        _stato["istanze"][nome] = ist
+        _scrivi()
 def istanza_caricamento(nome: str):
     with _lock:
         ist = _stato["istanze"].get(nome, _istanza_default(nome))
@@ -267,6 +367,15 @@ def istanza_completata(nome: str, inviate: int):
         ist = _stato["istanze"].get(nome, _istanza_default(nome))
         ist["stato"]           = "completata"
         ist["squadre_inviate"] = inviate
+        ist.setdefault("timing", _timing_default())
+        # Best-effort: se non presente, segna fine raccolta al completamento logico
+        t = ist["timing"]
+        if not t.get("ts_fine_raccolta"):
+            t["ts_fine_raccolta"] = datetime.now().strftime("%H:%M:%S")
+        t_ready = _parse_hms(t.get("ts_gioco_pronto", ""))
+        t_stop = _parse_hms(t.get("ts_fine_raccolta", ""))
+        if t_ready and t_stop:
+            t["dur_raccolta_s"] = int((t_stop - t_ready).total_seconds())
         try:
             t0 = datetime.strptime(ist["ts_inizio"], "%H:%M:%S").replace(
                 year=datetime.now().year,
@@ -330,6 +439,7 @@ def istanza_risorse_inizio(nome: str, pomodoro: float, legno: float,
         ist = _stato["istanze"].get(nome, _istanza_default(nome))
         res = _res_from_raw(pomodoro, legno, acciaio, petrolio)
         ist["res_inizio"] = res
+        ist["ts_res_inizio"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         # Aggiorna display superficiale
         ist["pomodoro"] = res["pomodoro"]
         ist["legno"]    = res["legno"]
@@ -495,6 +605,7 @@ def ciclo_completato(ciclo: int, squadre: int, durata_s: int):
             "squadre":    squadre,
             "durata_m":   round(durata_s / 60, 1),
             "ts":         datetime.now().strftime("%H:%M"),
+            "ts_iso":     datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "produzione": prod_agg,
             "inviato":    inviato_agg,
         })

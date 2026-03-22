@@ -1,72 +1,137 @@
 # Doomsday Bot V5 — CONTEXT FILE
 
-## 2026-03-18 — V5.17 (fix raccolta + robustezza)
+## Architettura generale
+
+### Pattern coordinate UI
+Tutte le coordinate UI seguono un flusso centralizzato a 3 livelli:
+1. **`config.py` sezione 5** — definisce costanti coordinate (es. `TAP_RADAR_ICONA`)
+2. **`coords.py` `UICoords`** — dataclass frozen che espone le coordinate per istanza; costruita una volta per ciclo da `UICoords.da_ist(ist)`
+3. **Moduli operativi** — ricevono `coords` come parametro, non leggono mai `config.*` direttamente
+
+Eccezione: coordinate globali invarianti tra istanze (es. `RADAR_MAPPA_ZONA`) vengono lette direttamente da `config` nei moduli interni.
+
+### Pattern template matching
+I template lingua-dipendenti (IT/EN) seguono lo stesso flusso:
+- Costanti in `config.py`: `RIFORNIMENTO_BTN_TEMPLATE`, `VIP_CLAIM_FREE_TEMPLATE`, ecc.
+- Getter in `config.py`: `get_btn_rifornimento_template(ist)`, `get_btn_claim_free_template(ist)`
+- Risoluzione in `coords.py`: `btn_rifornimento_template`, `btn_claim_free_template`
+- Uso nei moduli: `coords.btn_rifornimento_template`
+
+### Pattern task periodici
+Tutti i task schedulati seguono lo stesso schema:
+1. Flag abilitazione in `config.py` (es. `DAILY_RADAR_ABILITATO`)
+2. Intervallo schedulazione in `config.py` (es. `SCHEDULE_ORE_RADAR = 12`)
+3. Flag e intervallo sovrascrivibili da `runtime.json` → dashboard
+4. Controllo schedulazione tramite `scheduler.deve_eseguire(nome, porta, task)`
+5. Esecuzione nel modulo dedicato (es. `radar_show.esegui_radar_show(porta, nome, coords, logger)`)
+6. Registrazione in `scheduler.registra_esecuzione(nome, porta, task)`
+7. Stato persistito in `istanza_stato_{nome}_{porta}.json`
+
+### Pattern runtime
+- `config.py` — valori default statici
+- `runtime.json` — overrides globali e per-istanza (riletto ogni ciclo)
+- `runtime.py applica()` — sovrascrive `config.*` in memoria con i valori da runtime.json
+- `runtime.py istanze_attive()` — lista istanze fresh da config + overrides applicati
+- Dashboard → modifica runtime.json → effetto al ciclo successivo senza riavvio
+
+### Pattern status/produzione
+- `status.py` — scrive `status.json` in tempo reale per la dashboard
+- Produzione calcolata come delta inter-ciclo: `(res_inizio_N+1 - res_inizio_N) + res_inviato_N`
+- Timestamp ISO `ts_res_inizio` salvato ad ogni lettura OCR → M/h calcolato con tempo reale
+- Storico cicli con `ts_iso` per calcolo gap reale tra cicli (gestisce interruzioni bot)
+
+---
+
+## 2026-03-22 — V5.19
+
+### daily_tasks.py (nuovo task Radar Show)
+- Aggiunto task `radar` eseguito dopo VIP, schedulazione 12h
+- `esegui_daily_tasks()` riceve `coords` (UICoords) e lo passa ai task
+- Flag `DAILY_RADAR_ABILITATO` in config/runtime/dashboard
+
+### radar_show.py (nuovo modulo)
+- Task Radar Station: raccolta ricompense dalla mappa dinamica
+- Verifica badge rosso sull'icona prima di aprire (pixel detection)
+- Connected components numpy puro (no scipy) per trovare pallini rossi
+- Filtro forma circolare: compattezza > 0.55, aspect_ratio > 0.5, 8≤w/h≤22px
+- Delay 10s post-apertura per notifiche che scorrono
+- Calibrato su dataset 9 screen reali FAU_00..FAU_09
+- Pattern architetturale: `coords.tap_radar_icona` per coordinata icona
 
 ### raccolta.py
-- BUG1: attesa nodo blacklist ora in mappa pulita (BACK prima del sleep, poi CERCA r3 da stato pulito)
-- BUG3: uscita immediata loop quando tutti i tipi pianificati bloccati; fallback automatico su tipi alternativi (campo/segheria/petrolio/acciaio)
-- BUG4: recovery post-marcia fallita con back_rapidi_e_stato(n=4) + gestione home/overlay
-- Contatore reale a fine ciclo: rilegge dal gioco, riprende raccolta se slot liberi con sequenza fresca
-- OCR risorse: retry se almeno una risorsa principale è -1
-- sleep(2s) dopo vai_in_mappa per stabilizzazione widget contatore squadre
-- _leggi_attive_con_retry: rimosso BACK pericoloso nei retry, aggiunta verifica stato prima di OCR
-- UICoords fallback corretto da lista a dict: `{"nome": nome, "layout": 1, "lingua": "it"}`
+- Contatore squadre letto in **HOME** prima di `vai_in_mappa`
+- Early exit immediato se slot pieni — evita viaggio home→mappa→home
+- Fallback: se lettura home era assunta (0/N), rilegge in mappa per conferma
 
-### stato.py
-- vai_in_mappa: 2 BACK per chiudere banner dopo primo tap fallito
+### daily_tasks.py (VIP)
+- Macchina a 2 stati: cassaforte (coordinate fisse) + CLAIM free (template matching)
+- Template CLAIM free risolto da `coords.btn_claim_free_template`
+- STATO 1: tap badge VIP → tap cassaforte → dismiss popup ricompense
+- STATO 2: screenshot → cerca `btn_claim_free_en/it.png` → tap se trovato
+- ⚠️ `btn_claim_free_it.png` ancora mancante (BlueStacks IT)
 
-### alleanza.py
-- Verifica stato home prima dei tap
-- Fix bug ist[5] su dict → ist.get("layout", 1)
-- Timing tap Alleanza/Dono: 1.5s → 2.0s
+### config.py
+- `SCHEDULE_ORE_RADAR = 12`, `DAILY_RADAR_ABILITATO = True`
+- Coordinate Radar Station: `TAP_RADAR_ICONA`, `RADAR_MAPPA_ZONA`, `RADAR_*`
+- 4 soglie rifornimento separate: `RIFORNIMENTO_SOGLIA_CAMPO/LEGNO/PETROLIO/ACCIAIO_M`
+- `QTA_ACCIAIO` abilitato (era 0)
+- Fascia oraria per istanza: commento campo `fascia_oraria`
 
-### mumu.py
-- cleanup_istanze_appese: aggiunto kill MuMuVMM.exe (residuo VM headless)
-- Aggiunta funzione _get_pids_per_processo(nome_exe)
+### coords.py
+- Aggiunto `tap_radar_icona: Coord` al dataclass UICoords
+- Aggiunto `btn_claim_free_template: str` al dataclass UICoords
 
-### log.py
-- init_ciclo: archivia bot.log in debug/ciclo_NNN/bot.log e resetta bot.log a ogni ciclo
+### runtime.py
+- `DAILY_RADAR_ABILITATO` in `_default()` e `applica()`
+- `DAILY_VIP_ABILITATO` in `_default()` e `applica()`
+- 4 soglie rifornimento separate in `_default()` e `applica()`
+- Fascia oraria per istanza: `_in_fascia(fascia)` + filtro in `istanze_attive()`
 
-### dashboard_server.py
-- Aggiunti endpoint: /log (ultime N righe bot.log con filtri), /ping, /robots.txt
+### dashboard.html
+- Label task in inglese: Alliance Gifts / Alliance Messages / VIP Daily Rewards / Radar Show / Supply Resources
+- Checkbox Radar Show (`rt_radar_on`)
+- Layout 2 colonne sezione parametri globali
+- 4 campi soglia rifornimento separati con emoji risorsa
+- Colonna Fascia oraria con 2 time picker (checkbox on/off + HH:MM start/end)
+- Refresh 10s (era 3s)
 
-### claude_bridge.py (nuovo — in sospeso)
-- Obiettivo: esporre dashboard e log via URL pubblico per accesso remoto e analisi da Claude
-- Proxy locale porta 8082 con autenticazione token implementata correttamente
-- Tunnel testati: ngrok (*.ngrok-free.dev), localhost.run (*.lhr.life), Cloudflare (*.trycloudflare.com)
-- Tutti i tunnel bloccati dalla allowlist del sistema web_fetch di Claude
-- File incluso nel repo come base per sviluppi futuri — NON usare in produzione
-- dashboard.html: token injection automatico su tutte le fetch (funzionale per uso futuro)
+### status.py
+- `ts_res_inizio` / `ts_res_inizio_prec`: timestamp ISO lettura OCR risorse
+- `_calcola_produzione()`: aggiunge `_mh` (M/h per risorsa) con tempo reale
+- `ciclo_completato()`: aggiunge `ts_iso` nello storico cicli
 
-## 2026-03 — V5.16a (consolidamento)
-- Hardening MuMuPlayer: ADB stabile e cleanup affidabile
-- Migliorata robustezza runtime e flusso principale
-- Fix dashboard runtime e gestione overrides
-- Chiarita policy repository (png solo in templates, json esclusi)
+### rifornimento.py
+- Soglie per risorsa da 4 parametri separati (era `RIFORNIMENTO_SOGLIA_M` unico)
+- Acciaio non più escluso con `float("inf")`
+
+### allocation.py
+- `RATIO_TARGET` default aggiornato: 35/35/18.75/11.25 (acciaio era 6.25%)
+- `_sequenza_default` ricostruita: acciaio appare dalla posizione 6
+
+### main.py
+- Stampa configurazione runtime con label EN e tutte le soglie rifornimento
+
+---
 
 ## 2026-03-21 — V5.18 (selezione livello nodo + produzione oraria dashboard)
 
 ### raccolta.py
-- `_cerca_nodo`: selezione livello nodo via popup UI — reset con 6 tap su `—` (porta sempre a Lv.1 indipendentemente dal livello precedente), poi `(livello-1)` tap su `+`
-- Coordinate assolute per `—`, `+`, SEARCH misurate su screenshot reali 960x540 per tutti i tipi (campo/segheria/acciaio/petrolio) — necessario perché il popup del petrolio è clamped al bordo destro dello schermo
-- Aggiunto parametro `livello_target` a `_cerca_nodo` e `_tap_invia_squadra`, propagato fino a `raccolta_istanza`
-- `raccolta_istanza`: legge `livello` dall'istanza (`ist.get("livello", config.LIVELLO_RACCOLTA)`)
-- OCR risorse inizio ciclo: retry multiplo con backoff 2s → 3s → 4s (era singolo retry fisso a 2s); ogni retry aggiorna solo le risorse ancora mancanti, preserva quelle già lette
-- `_leggi_livello_nodo`: funzione OCR per leggere livello dal titolo popup nodo (pattern IT "Lv.N" e EN "Level: N") — usata per scartare nodi sotto-livello
+- `_cerca_nodo`: selezione livello nodo via popup UI
+- OCR risorse: retry con backoff 2s→3s→4s
 
 ### config.py
-- Aggiunto campo `"livello": 6` a tutte le istanze `ISTANZE` (BlueStacks) e `ISTANZE_MUMU` (MuMuPlayer)
-- Aggiornato commento campi comuni con descrizione campo `livello`
+- Campo `"livello": 6` a tutte le istanze
 
 ### dashboard.html
-- Aggiunta colonna **Lv.** nella tabella runtime istanze con `<select>` opzioni 5/6/7
-- Salvataggio `livello` come override esattamente come truppe/squadre/layout
-- Nuovo pannello **Produzione oraria** in sidebar: M/h ciclo corrente + media storica ultimi 10 cicli per tutte e 4 le risorse + totale aggregato
-- Produzione oraria visibile anche nella card di ogni istanza
-- Nuova colonna M/h nello storico cicli
+- Colonna Lv. con select 5/6/7
+- Pannello produzione oraria M/h
 
-### dashboard_server.py
-- Esposto campo `livello` in `/config_istanze.json` per entrambi BS e MuMu
+---
 
-### runtime.py
-- `istanze_attive()`: aggiunto supporto override `livello` per-istanza
+## 2026-03-18 — V5.17 (fix raccolta + robustezza)
+
+### raccolta.py
+- BUG1/BUG3/BUG4 fix, contatore reale, OCR retry
+
+### stato.py / alleanza.py / mumu.py / log.py
+- Fix navigazione, timing, cleanup processi, rotazione log

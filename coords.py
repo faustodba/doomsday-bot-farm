@@ -72,9 +72,13 @@ class UICoords:
     # --- Mappa tipo nodo → (tap_icona, tap_cerca) ---
     _mappa_tipo: Dict[str, Tuple[Coord, Coord]] = field(repr=False)
 
-    # --- Lingua istanza e template pulsante rifornimento ---
+    # --- Lingua istanza e template pulsanti lingua-dipendenti ---
     lingua:                    str   # "it" | "en"
     btn_rifornimento_template: str   # path template pulsante rifornimento
+    btn_claim_free_template:   str   # path template pulsante CLAIM free VIP
+
+    # --- Task periodici home ---
+    tap_radar_icona: Coord   # icona Radar Station in home
 
     # ------------------------------------------------------------------
     # Factory — unico punto di costruzione
@@ -132,6 +136,8 @@ class UICoords:
             _mappa_tipo       = mappa_tipo,
             lingua            = config.get_lingua(ist),
             btn_rifornimento_template = config.get_btn_rifornimento_template(ist),
+            btn_claim_free_template   = config.get_btn_claim_free_template(ist),
+            tap_radar_icona           = config.TAP_RADAR_ICONA,
         )
 
     def per_tipo(self, tipo: str) -> Tuple[Coord, Coord]:

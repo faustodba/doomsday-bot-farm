@@ -38,10 +38,38 @@
 import json
 import os
 import threading
+from datetime import datetime
 import config
 
 _lock = threading.Lock()
 _PATH = os.path.join(config.BOT_DIR, "runtime.json")
+
+
+# ==============================================================================
+# Utility fascia oraria
+# ==============================================================================
+def _in_fascia(fascia: str) -> bool:
+    """
+    Controlla se l'ora corrente è nella fascia oraria configurata.
+    fascia: "HH:MM-HH:MM"
+      start < end → fascia diurna stesso giorno  (es. "08:00-18:00")
+      start > end → fascia notturna span mezzanotte (es. "22:00-05:00")
+    Ritorna True in caso di fascia assente/malformata (fail-safe = H24).
+    """
+    if not fascia or not isinstance(fascia, str):
+        return True
+    try:
+        parti = fascia.strip().split("-")
+        if len(parti) != 2:
+            return True
+        start, end = parti[0].strip(), parti[1].strip()
+        now = datetime.now().strftime("%H:%M")
+        if start < end:
+            return start <= now < end        # fascia diurna
+        else:
+            return now >= start or now < end  # fascia notturna (span mezzanotte)
+    except Exception:
+        return True  # fail-safe: fascia malformata → includi sempre
 
 
 # ==============================================================================
@@ -61,9 +89,13 @@ def _default() -> dict:
             "WAIT_MINUTI":                    getattr(config, "WAIT_MINUTI", 1),
             "ALLEANZA_ABILITATA":             getattr(config, "ALLEANZA_ABILITATA", True),
             "MESSAGGI_ABILITATI":             getattr(config, "MESSAGGI_ABILITATI", True),
+            "DAILY_VIP_ABILITATO":            getattr(config, "DAILY_VIP_ABILITATO", True),
+            "DAILY_RADAR_ABILITATO":          getattr(config, "DAILY_RADAR_ABILITATO", True),
             "RIFORNIMENTO_ABILITATO":         getattr(config, "RIFORNIMENTO_ABILITATO", True),
-            "RIFORNIMENTO_SOGLIA_M":          getattr(config, "RIFORNIMENTO_SOGLIA_M", 5.0),
+            "RIFORNIMENTO_SOGLIA_CAMPO_M":    getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M",    5.0),
+            "RIFORNIMENTO_SOGLIA_LEGNO_M":    getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M",    5.0),
             "RIFORNIMENTO_SOGLIA_PETROLIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5),
+            "RIFORNIMENTO_SOGLIA_ACCIAIO_M":  getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M",  3.5),
             "ALLOCATION_RATIO": {
                 "campo":    0.3750,
                 "segheria": 0.3750,
@@ -211,12 +243,20 @@ def applica(rt: dict):
         config.ALLEANZA_ABILITATA = bool(g["ALLEANZA_ABILITATA"])
     if "MESSAGGI_ABILITATI" in g:
         config.MESSAGGI_ABILITATI = bool(g["MESSAGGI_ABILITATI"])
+    if "DAILY_VIP_ABILITATO" in g:
+        config.DAILY_VIP_ABILITATO = bool(g["DAILY_VIP_ABILITATO"])
+    if "DAILY_RADAR_ABILITATO" in g:
+        config.DAILY_RADAR_ABILITATO = bool(g["DAILY_RADAR_ABILITATO"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
-    if "RIFORNIMENTO_SOGLIA_M" in g:
-        config.RIFORNIMENTO_SOGLIA_M = float(g["RIFORNIMENTO_SOGLIA_M"])
+    if "RIFORNIMENTO_SOGLIA_CAMPO_M" in g:
+        config.RIFORNIMENTO_SOGLIA_CAMPO_M = float(g["RIFORNIMENTO_SOGLIA_CAMPO_M"])
+    if "RIFORNIMENTO_SOGLIA_LEGNO_M" in g:
+        config.RIFORNIMENTO_SOGLIA_LEGNO_M = float(g["RIFORNIMENTO_SOGLIA_LEGNO_M"])
     if "RIFORNIMENTO_SOGLIA_PETROLIO_M" in g:
         config.RIFORNIMENTO_SOGLIA_PETROLIO_M = float(g["RIFORNIMENTO_SOGLIA_PETROLIO_M"])
+    if "RIFORNIMENTO_SOGLIA_ACCIAIO_M" in g:
+        config.RIFORNIMENTO_SOGLIA_ACCIAIO_M = float(g["RIFORNIMENTO_SOGLIA_ACCIAIO_M"])
 
     if "ALLOCATION_RATIO" in g:
         try:
@@ -270,11 +310,17 @@ def istanze_attive(rt: dict, emulatore: str) -> list:
 
         # Costruisci dizionario risultante applicando overrides numerici
         ist_out = dict(ist)
-        if "truppe"      in ovr: ist_out["truppe"]      = int(ovr["truppe"])
-        if "max_squadre" in ovr: ist_out["max_squadre"] = int(ovr["max_squadre"])
-        if "layout"      in ovr: ist_out["layout"]      = int(ovr["layout"])
-        if "lingua"      in ovr: ist_out["lingua"]      = str(ovr["lingua"])
-        if "livello"     in ovr: ist_out["livello"]     = int(ovr["livello"])
+        if "truppe"        in ovr: ist_out["truppe"]        = int(ovr["truppe"])
+        if "max_squadre"   in ovr: ist_out["max_squadre"]   = int(ovr["max_squadre"])
+        if "layout"        in ovr: ist_out["layout"]        = int(ovr["layout"])
+        if "lingua"        in ovr: ist_out["lingua"]        = str(ovr["lingua"])
+        if "livello"       in ovr: ist_out["livello"]       = int(ovr["livello"])
+        if "fascia_oraria" in ovr: ist_out["fascia_oraria"] = str(ovr["fascia_oraria"])
+
+        # fascia_oraria: se configurata, escludi istanza fuori fascia
+        fascia = ist_out.get("fascia_oraria", "")
+        if fascia and not _in_fascia(fascia):
+            continue
 
         # Normalizza porta per tipo emulatore
         if "BlueStacks" in emulatore:

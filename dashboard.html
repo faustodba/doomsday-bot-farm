@@ -46,7 +46,7 @@
   .last-update { font-size: 10px; color: var(--text-dim); }
 
   .refresh-bar { height: 2px; background: var(--border); margin-bottom: 16px; overflow: hidden; border-radius: 1px; }
-  .refresh-bar-inner { height: 100%; background: var(--accent); animation: refill 3s linear infinite; }
+  .refresh-bar-inner { height: 100%; background: var(--accent); animation: refill 10s linear infinite; }
   @keyframes refill { from{width:100%} to{width:0%} }
 
   .conn-error { display: none; background: var(--red-bg); border: 1px solid rgba(239,68,68,0.3); border-radius: 5px; padding: 10px 16px; font-size: 12px; color: var(--red); margin-bottom: 14px; }
@@ -187,6 +187,11 @@
   .ist-table input[type=number] { width: 60px; background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 5px; font-family: var(--mono); font-size: 11px; text-align: right; }
   .ist-table input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
   .ist-table select { background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 4px; font-family: var(--mono); font-size: 11px; }
+  .fascia-wrap { display: flex; align-items: center; gap: 3px; }
+  .fascia-wrap input[type=time] { width: 72px; background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 4px; font-family: var(--mono); font-size: 11px; }
+  .fascia-wrap input[type=time]:disabled { opacity: 0.35; }
+  .fascia-wrap .fascia-sep { color: var(--text-dim); font-size: 10px; }
+  .fascia-wrap input[type=checkbox].fascia-cb { width: 13px; height: 13px; margin-right: 2px; }
 
   /* ── PRODUZIONE ORARIA ── */
   .ph-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
@@ -328,19 +333,36 @@
   <!-- Parametri globali -->
   <div class="rt-card">
     <h3>Parametri globali</h3>
-    <div class="rt-row"><label>Istanze parallele</label><input type="number" id="rt_blocco" min="1" max="10" step="1"></div>
-    <div class="rt-row"><label>Attesa tra cicli (min)</label><input type="number" id="rt_wait" min="1" max="60" step="1"></div>
-    <div class="rt-row"><label>Alleanza abilitata</label><input type="checkbox" id="rt_alleanza_on"></div>
-    <div class="rt-row"><label>Messaggi abilitati</label><input type="checkbox" id="rt_messaggi_on"></div>
-    <div class="rt-row"><label>Rifornimento abilitato</label><input type="checkbox" id="rt_rif_on"></div>
-    <div class="rt-row"><label>Soglia invio pomodoro/legno (M)</label><input type="number" id="rt_soglia" min="0.1" max="50" step="0.5"></div>
-    <div class="rt-row"><label>Soglia invio petrolio (M)</label><input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5"></div>
-    <h3 style="margin-top:14px">Allocation ratio</h3>
-    <div class="rt-row"><label>🍅 Campo (pomodoro) %</label><input type="number" id="rt_r_campo" min="0" max="100" step="1"></div>
-    <div class="rt-row"><label>🪵 Segheria (legno) %</label><input type="number" id="rt_r_seg" min="0" max="100" step="1"></div>
-    <div class="rt-row"><label>🛢 Petrolio %</label><input type="number" id="rt_r_pet" min="0" max="100" step="1"></div>
-    <div class="rt-row"><label>⚙ Acciaio %</label><input type="number" id="rt_r_acc" min="0" max="100" step="1"></div>
-    <div style="font-size:10px;color:var(--text-dim);margin-top:4px" id="rt_ratio_sum">Totale: —</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+
+      <!-- Colonna sinistra: ciclo + task on/off -->
+      <div>
+        <div class="rt-row"><label>Istanze parallele</label><input type="number" id="rt_blocco" min="1" max="10" step="1"></div>
+        <div class="rt-row"><label>Attesa tra cicli (min)</label><input type="number" id="rt_wait" min="1" max="60" step="1"></div>
+        <div style="margin-top:10px;margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Task</div>
+        <div class="rt-row"><label>Alliance Gifts</label><input type="checkbox" id="rt_alleanza_on"></div>
+        <div class="rt-row"><label>Alliance Messages</label><input type="checkbox" id="rt_messaggi_on"></div>
+        <div class="rt-row"><label>VIP Daily Rewards</label><input type="checkbox" id="rt_vip_on"></div>
+        <div class="rt-row"><label>Radar Show</label><input type="checkbox" id="rt_radar_on"></div>
+        <div class="rt-row"><label>Supply Resources</label><input type="checkbox" id="rt_rif_on"></div>
+      </div>
+
+      <!-- Colonna destra: soglie invio -->
+      <div>
+        <div style="margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Soglie invio rifornimento</div>
+        <div class="rt-row"><label>🍅 Campo (M)</label><input type="number" id="rt_soglia_campo" min="0.1" max="50" step="0.5"></div>
+        <div class="rt-row"><label>🪵 Legno (M)</label><input type="number" id="rt_soglia_legno" min="0.1" max="50" step="0.5"></div>
+        <div class="rt-row"><label>🛢 Petrolio (M)</label><input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5"></div>
+        <div class="rt-row"><label>⚙ Acciaio (M)</label><input type="number" id="rt_soglia_acc" min="0.1" max="25" step="0.5"></div>
+        <div style="margin-top:10px;margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Allocation ratio</div>
+        <div class="rt-row"><label>🍅 Campo %</label><input type="number" id="rt_r_campo" min="0" max="100" step="1"></div>
+        <div class="rt-row"><label>🪵 Segheria %</label><input type="number" id="rt_r_seg" min="0" max="100" step="1"></div>
+        <div class="rt-row"><label>🛢 Petrolio %</label><input type="number" id="rt_r_pet" min="0" max="100" step="1"></div>
+        <div class="rt-row"><label>⚙ Acciaio %</label><input type="number" id="rt_r_acc" min="0" max="100" step="1"></div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:4px" id="rt_ratio_sum">Totale: —</div>
+      </div>
+
+    </div>
     <button class="rt-save-btn" id="rt_save_globali" onclick="rtSalvaGlobali()">💾 SALVA GLOBALI</button>
     <div class="rt-msg" id="rt_msg_globali"></div>
   </div>
@@ -355,7 +377,7 @@
     <div style="overflow-x:auto">
       <table class="ist-table">
         <thead><tr>
-          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th><th>Lv.</th>
+          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th><th>Lv.</th><th>Fascia</th>
         </tr></thead>
         <tbody id="rt_ist_tbody"></tbody>
       </table>
@@ -367,13 +389,13 @@
 </div>
 
 <footer>
-  <span>Auto-refresh ogni 3 secondi</span>
+  <span>Auto-refresh ogni 10 secondi</span>
   <span id="footerInfo">—</span>
 </footer>
 
 <script>
 const STATUS_FILE = "status.json";
-const REFRESH_MS  = 3000;
+const REFRESH_MS  = 10000;
 
 // Token autenticazione per accesso pubblico via bridge.
 // Se l'URL contiene ?token=xxx, viene aggiunto automaticamente a tutte le fetch.
@@ -427,8 +449,11 @@ function calcPhDaCiclo(produzione, durata_s) {
 }
 
 // Media M/h dagli ultimi N cicli dello storico.
-// storico_cicli: array di {produzione:{...}, durata_m: float}
-// Ritorna dict {pomodoro, legno, acciaio, petrolio} in M/h medi.
+// Usa ts_iso per calcolare il gap reale tra cicli consecutivi.
+// Se ts_iso non disponibile, fallback su durata_m (comportamento precedente).
+// Esclude campioni con gap anomalo (> MAX_GAP_ORE ore) per gestire interruzioni bot.
+const MAX_GAP_ORE = 4; // gap massimo accettabile tra cicli consecutivi
+
 function calcPhStorico(storico_cicli, n_cicli = 10) {
   const out = {};
   RES_KEYS.forEach(k => out[k] = -1);
@@ -438,9 +463,24 @@ function calcPhStorico(storico_cicli, n_cicli = 10) {
   const somme  = {}; const conti = {};
   RES_KEYS.forEach(k => { somme[k] = 0; conti[k] = 0; });
 
-  ultimi.forEach(c => {
-    const ore = (c.durata_m ?? 0) / 60;
-    if (ore <= 0) return;
+  ultimi.forEach((c, i) => {
+    // Calcola ore reali: delta tra ts_iso di cicli consecutivi
+    let ore = -1;
+    if (i > 0 && ultimi[i-1].ts_iso && c.ts_iso) {
+      try {
+        const t0 = new Date(ultimi[i-1].ts_iso).getTime();
+        const t1 = new Date(c.ts_iso).getTime();
+        const diff_ore = (t1 - t0) / 3600000;
+        if (diff_ore > 0 && diff_ore <= MAX_GAP_ORE) ore = diff_ore;
+      } catch(e) {}
+    }
+    // Fallback su durata_m se ts_iso non disponibile
+    if (ore <= 0) {
+      const ore_fb = (c.durata_m ?? 0) / 60;
+      if (ore_fb > 0) ore = ore_fb;
+    }
+    if (ore <= 0) return; // campione non utilizzabile
+
     const prod = c.produzione || {};
     RES_KEYS.forEach(k => {
       const v = prod[k] ?? -1;
@@ -567,30 +607,22 @@ function aggiorna(data) {
   document.getElementById("aggDiamantiCnt").textContent = diaCnt>0 ? `${diaCnt}/${Object.keys(istanze).length} istanze` : "nessun dato";
 
   // ── Produzione oraria sidebar ──
-  // Ciclo corrente: somma produzioni istanze / media durate
+  // Corrente: legge _mh calcolato dal backend con delta tempo reale tra cicli
+  // Storico:  media ultimi 10 cicli con gap reale tra ts_iso consecutivi
   const storicoCicli = data.storico_cicli || [];
   const phStorico = calcPhStorico(storicoCicli, 10);
 
-  // Calcola ph corrente sommando le produzioni di tutte le istanze
-  // e dividendo per la media delle durate disponibili
-  const phCurrSomme = {}; let phCurrDurate = 0, phCurrDurateCnt = 0;
-  RES_KEYS.forEach(k => phCurrSomme[k] = -1);
+  // Somma i _mh per risorsa da tutte le istanze (già calcolati in status.py)
+  const phCurr = {};
+  RES_KEYS.forEach(k => phCurr[k] = -1);
   for (const n in istanze) {
     const ist = istanze[n];
-    const dur = ist.timing?.dur_totale_s ?? 0;
-    if (dur > 0) { phCurrDurate += dur; phCurrDurateCnt++; }
-    const prod = ist.produzione || {};
+    const mh = ist.produzione?._mh || {};
     RES_KEYS.forEach(k => {
-      const v = prod[k] ?? -1;
-      if (v >= 0) phCurrSomme[k] = (phCurrSomme[k] < 0 ? 0 : phCurrSomme[k]) + v;
+      const v = mh[k] ?? -1;
+      if (v >= 0) phCurr[k] = (phCurr[k] < 0 ? 0 : phCurr[k]) + v;
     });
   }
-  const phCurrDurMedia = phCurrDurateCnt > 0 ? phCurrDurate / phCurrDurateCnt : 0;
-  const phCurr = {};
-  RES_KEYS.forEach(k => {
-    const v = phCurrSomme[k];
-    phCurr[k] = (v >= 0 && phCurrDurMedia > 0) ? v / (phCurrDurMedia / 3600) : -1;
-  });
 
   // Totale aggregato M/h corrente
   const phCurrTot = RES_KEYS.reduce((s, k) => phCurr[k] >= 0 ? s + phCurr[k] : s, 0);
@@ -914,9 +946,13 @@ function rtPopolaGlobali(rt) {
   _setVal("rt_wait",            g.WAIT_MINUTI ?? 1);
   _setChk("rt_alleanza_on",     g.ALLEANZA_ABILITATA ?? true);
   _setChk("rt_messaggi_on",     g.MESSAGGI_ABILITATI ?? true);
+  _setChk("rt_vip_on",          g.DAILY_VIP_ABILITATO ?? true);
+  _setChk("rt_radar_on",        g.DAILY_RADAR_ABILITATO ?? true);
   _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
-  _setVal("rt_soglia",          g.RIFORNIMENTO_SOGLIA_M ?? 5.0);
+  _setVal("rt_soglia_campo",    g.RIFORNIMENTO_SOGLIA_CAMPO_M    ?? 5.0);
+  _setVal("rt_soglia_legno",    g.RIFORNIMENTO_SOGLIA_LEGNO_M    ?? 5.0);
   _setVal("rt_soglia_pet",      g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
+  _setVal("rt_soglia_acc",      g.RIFORNIMENTO_SOGLIA_ACCIAIO_M  ?? 3.5);
   const ratio = g.ALLOCATION_RATIO || {};
   _setVal("rt_r_campo", Math.round((ratio.campo    ?? 0.375)  * 100));
   _setVal("rt_r_seg",   Math.round((ratio.segheria ?? 0.375)  * 100));
@@ -947,6 +983,7 @@ function rtCaricaIstanze() {
     const max_squadre = ovr.max_squadre !== undefined ? ovr.max_squadre : (ist.max_squadre ?? 4);
     const layout      = ovr.layout      !== undefined ? ovr.layout      : (ist.layout      ?? 1);
     const livello     = ovr.livello     !== undefined ? ovr.livello     : (ist.livello     ?? 6);
+    const fascia      = ovr.fascia_oraria !== undefined ? ovr.fascia_oraria : (ist.fascia_oraria ?? "");
     const lingua      = ist.lingua ?? "it";
 
     const tr = document.createElement("tr");
@@ -968,7 +1005,27 @@ function rtCaricaIstanze() {
         <option value="5" ${livello==5?"selected":""}>5</option>
         <option value="6" ${livello==6?"selected":""}>6</option>
         <option value="7" ${livello==7?"selected":""}>7</option>
-      </select></td>`;
+      </select></td>
+      <td>
+        ${(()=>{
+          // Parsa fascia "HH:MM-HH:MM" nei due componenti
+          const parti = fascia.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+          const fa_on  = parti ? "checked" : "";
+          const fa_s   = parti ? parti[1] : "22:00";
+          const fa_e   = parti ? parti[2] : "05:00";
+          const dis    = parti ? "" : "disabled";
+          return `<div class="fascia-wrap">
+            <input type="checkbox" class="fascia-cb" data-field="fascia_on" ${fa_on}
+              title="Abilita fascia oraria" onchange="
+                const row=this.closest('tr');
+                row.querySelector('[data-field=fascia_start]').disabled=!this.checked;
+                row.querySelector('[data-field=fascia_end]').disabled=!this.checked;">
+            <input type="time" data-field="fascia_start" value="${fa_s}" ${dis} title="Inizio fascia">
+            <span class="fascia-sep">→</span>
+            <input type="time" data-field="fascia_end"   value="${fa_e}" ${dis} title="Fine fascia (start>end = notturna)">
+          </div>`;
+        })()}
+      </td>`;
 
     // Toggle visivo opacity al cambio checkbox
     tr.querySelector('[data-field="abilitata"]').addEventListener("change", function() {
@@ -1021,9 +1078,13 @@ async function rtSalvaGlobali() {
     WAIT_MINUTI:                    +_val("rt_wait"),
     ALLEANZA_ABILITATA:             document.getElementById("rt_alleanza_on").checked,
     MESSAGGI_ABILITATI:             document.getElementById("rt_messaggi_on").checked,
+    DAILY_VIP_ABILITATO:            document.getElementById("rt_vip_on").checked,
+    DAILY_RADAR_ABILITATO:          document.getElementById("rt_radar_on").checked,
     RIFORNIMENTO_ABILITATO:         document.getElementById("rt_rif_on").checked,
-    RIFORNIMENTO_SOGLIA_M:          +_val("rt_soglia"),
-    RIFORNIMENTO_SOGLIA_PETROLIO_M: +_val("rt_soglia_pet"),
+    RIFORNIMENTO_SOGLIA_CAMPO_M:          +_val("rt_soglia_campo"),
+    RIFORNIMENTO_SOGLIA_LEGNO_M:          +_val("rt_soglia_legno"),
+    RIFORNIMENTO_SOGLIA_PETROLIO_M:       +_val("rt_soglia_pet"),
+    RIFORNIMENTO_SOGLIA_ACCIAIO_M:        +_val("rt_soglia_acc"),
     ALLOCATION_RATIO: { campo, segheria: seg, petrolio: pet, acciaio: acc },
   };
 
@@ -1058,6 +1119,10 @@ async function rtSalvaIstanze() {
     const max_squadre = +(tr.querySelector('[data-field="max_squadre"]')?.value ?? ist.max_squadre);
     const layout      = +(tr.querySelector('[data-field="layout"]')?.value      ?? ist.layout);
     const livello     = +(tr.querySelector('[data-field="livello"]')?.value     ?? (ist.livello ?? 6));
+    const fascia_on    = tr.querySelector('[data-field="fascia_on"]')?.checked ?? false;
+    const fascia_start = tr.querySelector('[data-field="fascia_start"]')?.value ?? "22:00";
+    const fascia_end   = tr.querySelector('[data-field="fascia_end"]')?.value   ?? "05:00";
+    const fascia       = fascia_on ? `${fascia_start}-${fascia_end}` : "";
 
     // Costruisci delta: solo i campi che differiscono dal default config.py
     const delta = {};
@@ -1066,12 +1131,14 @@ async function rtSalvaIstanze() {
     const cfg_max_squadre = ist.max_squadre ?? 4;
     const cfg_layout      = ist.layout      ?? 1;
     const cfg_livello     = ist.livello     ?? 6;
+    const cfg_fascia      = ist.fascia_oraria ?? "";
 
     if (abilitata   !== cfg_abilitata)   delta.abilitata   = abilitata;
     if (truppe      !== cfg_truppe)      delta.truppe      = truppe;
     if (max_squadre !== cfg_max_squadre) delta.max_squadre = max_squadre;
     if (layout      !== cfg_layout)      delta.layout      = layout;
     if (livello     !== cfg_livello)     delta.livello     = livello;
+    if (fascia      !== cfg_fascia)      delta.fascia_oraria = fascia;
 
     if (Object.keys(delta).length > 0) {
       ovrs[nome] = { ...(ovrs[nome] || {}), ...delta };

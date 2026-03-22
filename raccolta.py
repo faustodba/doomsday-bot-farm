@@ -663,7 +663,7 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
 
     # --- DAILY TASKS — eseguiti in HOME, schedulazione 24h ---
     import daily_tasks as _daily
-    _daily.esegui_daily_tasks(porta, nome, logger)
+    _daily.esegui_daily_tasks(porta, nome, logger, coords=coords)
 
     # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
     try:
@@ -679,6 +679,26 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     except Exception as _e:
         log(f"Rifornimento: errore non bloccante: {_e}")
 
+    # --- CONTATORE SQUADRE in HOME — evita vai_in_mappa se slot già pieni ---
+    # Il widget contatore è visibile sia in home che in mappa con le stesse
+    # caratteristiche. Leggerlo in home (UI stabile) è più affidabile che
+    # leggerlo subito dopo la transizione home→mappa (widget lento a renderizzarsi).
+    attive_inizio, totale, libere = stato.conta_squadre(porta, n_letture=3)
+    if attive_inizio == -1:
+        log("Contatore non visibile in home - attendo 2s e riprovo...")
+        time.sleep(2.0)
+        attive_inizio, totale, libere = stato.conta_squadre(porta, n_letture=3)
+
+    _fallback_totale = max_squadre if max_squadre and max_squadre > 0 else 4
+    if attive_inizio == -1:
+        log(f"Contatore non visibile in home — assumo 0/{_fallback_totale} (procedo)")
+        attive_inizio, totale, libere = 0, _fallback_totale, _fallback_totale
+    else:
+        log(f"Squadre: {attive_inizio}/{totale} attive, {libere} libere")
+        if libere == 0:
+            log("Nessuna squadra libera - salto raccolta")
+            return 0
+
     # Porta in mappa
     gia_in_mappa = stato.rileva(porta)[0] == "mappa"
     if not stato.vai_in_mappa(porta, nome, logger):
@@ -688,11 +708,7 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
 
     if gia_in_mappa:
         log("Attesa rendering mappa (già in mappa al caricamento)...")
-        time.sleep(2.0)
-    else:
-        # Attesa extra per il rendering del widget squadre dopo la transizione home→mappa.
-        # Il contatore X/Y appare circa 1.5-2s dopo che la mappa è visibile.
-        time.sleep(2.0)
+    time.sleep(2.0)
 
     # Leggi risorse deposito — retry con backoff se almeno una risorsa principale
     # non è leggibile. Causa tipica: barra non ancora renderizzata dopo vai_in_mappa,
@@ -736,24 +752,18 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
                + (f"  💎 {int(diamanti)}"  if diamanti >= 0 else ""))
     log(f"Deposito: {ris_log}")
 
-    # Leggi contatore squadre (con fallback)
-    attive_inizio, totale, libere = stato.conta_squadre(porta, n_letture=3)
-    if attive_inizio == -1:
-        log("Contatore non visibile - attendo 2.5s e riprovo...")
-        time.sleep(2.5)
-        attive_inizio, totale, libere = stato.conta_squadre(porta, n_letture=3)
-
-    if attive_inizio == -1:
-        fallback_totale = max_squadre if max_squadre and max_squadre > 0 else 4
-        log(f"Contatore non visibile dopo retry - assumo 0/{fallback_totale} attive, {fallback_totale} libere")
-        attive_inizio, totale, libere = 0, fallback_totale, fallback_totale
-    else:
-        log(f"Squadre: {attive_inizio}/{totale} attive, {libere} libere")
-
-    if libere == 0:
-        log("Nessuna squadra libera - salto raccolta")
-        stato.vai_in_home(porta, nome, logger)
-        return 0
+    # Contatore già letto in home — aggiorna totale/libere se la lettura home
+    # era fallback (attive_inizio==0 assunto). Il totale reale lo conosciamo
+    # solo in mappa, quindi rileggiamo solo se era fallback.
+    if totale == _fallback_totale and attive_inizio == 0:
+        _att, _tot, _lib = stato.conta_squadre(porta, n_letture=3)
+        if _att != -1:
+            attive_inizio, totale, libere = _att, _tot, _lib
+            log(f"Squadre (rilettura mappa): {attive_inizio}/{totale} attive, {libere} libere")
+            if libere == 0:
+                log("Nessuna squadra libera (confermato in mappa) - salto raccolta")
+                stato.vai_in_home(porta, nome, logger)
+                return 0
 
     obiettivo = totale
     log(f"Obiettivo: {obiettivo}/{totale} (slot da riempire fino a pieno)")

@@ -19,6 +19,7 @@ import time
 import adb
 import config
 import timing
+import status as _status
 
 # Attesa minima garantita prima del polling popup.
 # Il gioco non può caricare in meno di questo tempo.
@@ -128,6 +129,8 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
                 adb.keyevent(porta, "KEYCODE_BACK")
                 time.sleep(0.6)
                 log("Gioco pronto! → avvio raccolta immediata")
+                try: _status.istanza_gioco_pronto(nome)
+                except Exception: pass
                 caricata = True
                 t_totale = ATTESA_MINIMA_CARICA + (time.time() - t_start)
                 timing.registra(nome, t_totale, logger)
@@ -174,9 +177,13 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
         inviate = fn_raccolta(ist)
         log(f"Completata - {inviate} squadre inviate")
         risultati[nome] = inviate
+        try: _status.istanza_completata(nome, inviate)
+        except Exception: pass
     except Exception as e:
         log(f"ERRORE raccolta: {e}")
         risultati[nome] = -1
+        try: _status.istanza_errore(nome, "errore")
+        except Exception: pass
 
     # --- Fase 4: chiusura immediata ---
     fn_chiudi(ist, logger)

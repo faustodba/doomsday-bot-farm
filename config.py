@@ -112,6 +112,10 @@ _verifica_percorsi()
 #     layout      : 1 = barra standard 5 icone | 2 = compatto 4 icone (no Bestia)
 #     livello     : livello nodo da cercare (1-6, default 6) — sovrascrivibile da runtime
 #     abilitata   : True = partecipa al ciclo | False = visibile in dashboard ma esclusa
+    #     fascia_oraria: fascia di funzionamento "HH:MM-HH:MM" (default assente = H24)
+    #                   start < end → fascia diurna (es. "08:00-18:00")
+    #                   start > end → fascia notturna span mezzanotte (es. "22:00-05:00")
+    #                   assente o "" → funzionamento H24
 #
 #   SOLO BlueStacks:
 #     interno     : nome interno BS (es. "Pie64_12")
@@ -210,6 +214,23 @@ OCR_MARCIA_ETA_DEBUG_SAVE = False  # True = salva crop falliti in debug_eta/
 OCR_MARCIA_ETA_MARGINE_S  = 5     # secondi extra dopo ETA reale
 OCR_MARCIA_ETA_MIN_S      = 8     # attesa minima anche se ETA molto bassa
 
+# --- Radar Show ---
+TAP_RADAR_ICONA    = (78,  315)  # icona Radar Station in home (badge rosso)
+RADAR_MAPPA_ZONA   = (0, 100, 860, 460)  # area mappa Radar Station (960x540)
+RADAR_BADGE_R_MIN  = 150   # soglia R minima badge rosso
+RADAR_BADGE_G_MAX  = 85    # soglia G massima badge rosso
+RADAR_BADGE_B_MAX  = 85    # soglia B massima badge rosso
+RADAR_COMP_MIN     = 0.55  # compattezza minima componente (cerchio vs triangolo)
+RADAR_ASPECT_MIN   = 0.50  # aspect ratio minima (w/h vicino a 1 = cerchio)
+RADAR_W_MIN        = 8     # larghezza minima pallino (px)
+RADAR_W_MAX        = 22    # larghezza massima pallino (px)
+RADAR_H_MIN        = 8     # altezza minima pallino (px)
+RADAR_H_MAX        = 22    # altezza massima pallino (px)
+RADAR_PX_MIN       = 15    # pixel rossi minimi per componente valida
+RADAR_TIMEOUT_S    = 30    # timeout loop raccolta pallini (secondi)
+RADAR_TAP_DELAY_S  = 1.2   # attesa dopo ogni tap pallino (secondi)
+RADAR_SCAN_DELAY_S = 1.0   # attesa tra scan successivi (secondi)
+
 # --- Coordinate Messaggi ---
 MSG_ICONA_X        = 928
 MSG_ICONA_Y        = 430
@@ -270,14 +291,16 @@ DELAY_MARCIA      = 4000   # ms attesa dopo MARCIA
 # ==============================================================================
 
 # --- Schedulazione ---
-SCHEDULE_ORE_MESSAGGI = 4    # ore minime tra esecuzioni raccolta messaggi
-SCHEDULE_ORE_ALLEANZA = 4    # ore minime tra esecuzioni raccolta alleanza
-SCHEDULE_ORE_VIP      = 24   # ore minime tra esecuzioni ricompense VIP
+SCHEDULE_ORE_MESSAGGI  = 4    # ore minime tra esecuzioni raccolta messaggi
+SCHEDULE_ORE_ALLEANZA  = 4    # ore minime tra esecuzioni raccolta alleanza
+SCHEDULE_ORE_VIP       = 24   # ore minime tra esecuzioni ricompense VIP
+SCHEDULE_ORE_RADAR     = 12   # ore minime tra esecuzioni Radar Show
 
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
-ALLEANZA_ABILITATA  = True   # False = salta raccolta doni alleanza
-MESSAGGI_ABILITATI  = True   # False = salta raccolta messaggi sistema/alleanza
-DAILY_VIP_ABILITATO = True   # False = salta ricompense VIP giornaliere
+ALLEANZA_ABILITATA     = True   # False = salta raccolta doni alleanza
+MESSAGGI_ABILITATI     = True   # False = salta raccolta messaggi sistema/alleanza
+DAILY_VIP_ABILITATO    = True   # False = salta ricompense VIP giornaliere
+DAILY_RADAR_ABILITATO  = True   # False = salta Radar Show
 
 # --- Rifornimento alleanza ---
 RIFORNIMENTO_ABILITATO         = True
@@ -285,11 +308,15 @@ DOOMS_ACCOUNT                  = "FauMorfeus"
 DOOMS_AVATAR                   = "templates/avatar.png"
 RIFORNIMENTO_BTN_TEMPLATE      = "templates/btn_risorse_approv.png"       # IT
 RIFORNIMENTO_BTN_TEMPLATE_EN   = "templates/btn_supply_resources.png"     # EN
-RIFORNIMENTO_SOGLIA_M          = 5.0
+VIP_CLAIM_FREE_TEMPLATE        = "templates/btn_claim_free_it.png"        # IT ⚠️ MANCANTE
+VIP_CLAIM_FREE_TEMPLATE_EN     = "templates/btn_claim_free_en.png"        # EN
+RIFORNIMENTO_SOGLIA_CAMPO_M    = 5.0
+RIFORNIMENTO_SOGLIA_LEGNO_M    = 5.0
 RIFORNIMENTO_SOGLIA_PETROLIO_M = 2.5
+RIFORNIMENTO_SOGLIA_ACCIAIO_M  = 3.5
 RIFORNIMENTO_QTA_POMODORO      = 999_000_000
 RIFORNIMENTO_QTA_LEGNO         = 999_000_000
-RIFORNIMENTO_QTA_ACCIAIO       = 0
+RIFORNIMENTO_QTA_ACCIAIO       = 999_000_000
 RIFORNIMENTO_QTA_PETROLIO      = 999_000_000
 
 def get_lingua(ist: dict) -> str:
@@ -301,3 +328,9 @@ def get_btn_rifornimento_template(ist: dict) -> str:
     if get_lingua(ist) == "en":
         return RIFORNIMENTO_BTN_TEMPLATE_EN
     return RIFORNIMENTO_BTN_TEMPLATE
+
+def get_btn_claim_free_template(ist: dict) -> str:
+    """Ritorna il path del template pulsante CLAIM free VIP per la lingua dell'istanza."""
+    if get_lingua(ist) == "en":
+        return VIP_CLAIM_FREE_TEMPLATE_EN
+    return VIP_CLAIM_FREE_TEMPLATE

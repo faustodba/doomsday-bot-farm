@@ -4,75 +4,113 @@ Bot Python per l'automazione della raccolta risorse nel gioco **Doomsday: Last S
 ---
 ## ⚠️ Disclaimer
 Questo progetto nasce come **studio personale** sulle tecnologie di automazione (Python, ADB, OCR con Tesseract, computer vision con OpenCV) applicato a un contesto di gioco.
-- **Nessun fine di lucro**
-- **Solo uso personale**
-- **Fair use** su istanze emulate di proprietà dell’utente
-- **Nessuna garanzia**
+- **Nessun fine di lucro** — **Solo uso personale** — **Fair use** su istanze emulate di proprietà dell'utente — **Nessuna garanzia**
+
+---
+## 📦 Dipendenze Python
+```
+pip install pillow opencv-python pytesseract numpy
+```
+Nessuna dipendenza aggiuntiva — `scipy` non è richiesto.
+
+---
+## ✅ Versione v5.19 (task periodici + architettura consolidata)
+
+### Radar Show (`radar_show.py` — nuovo)
+- Nuovo task periodico schedulato ogni **12h**
+- Apre Radar Station dalla home, raccoglie tutte le ricompense (pallini rossi)
+- Riconoscimento pallini via **connected components numpy puro** — no scipy
+- Filtro forma circolare: compattezza > 0.55, aspect ratio > 0.5, dimensione 8-22px
+- Verifica badge rosso sull'icona prima di aprire — skip immediato se assente
+- Delay 10s post-apertura per notifiche che scorrono
+- Calibrato su dataset 9 screen reali
+
+### VIP Daily Rewards (`daily_tasks.py`)
+- Macchina a **2 stati**: cassaforte (coordinate fisse) + CLAIM free (template matching)
+- Template lingua-dipendente risolto da `coords.btn_claim_free_template`
+- ⚠️ `templates/btn_claim_free_it.png` mancante (BlueStacks IT)
+
+### Contatore squadre in HOME (`raccolta.py`)
+- Letto prima di `vai_in_mappa` — **early exit se slot pieni** senza entrare in mappa
+- Risparmio ~15-20s per istanza con slot pieni
+
+### Soglie rifornimento separate (`rifornimento.py`, `config.py`)
+- 4 soglie indipendenti: campo 5M / legno 5M / petrolio 2.5M / acciaio 3.5M
+- Acciaio abilitato all'invio (era escluso)
+- Configurabili dalla dashboard senza riavvio
+
+### Fascia oraria per istanza (`runtime.py`, `dashboard.html`)
+- Campo `fascia_oraria: "HH:MM-HH:MM"` per istanza negli overrides
+- `start < end` → fascia diurna | `start > end` → fascia notturna (span mezzanotte)
+- Assente o vuoto → H24 (default)
+- Dashboard: 2 time picker con checkbox on/off
+
+### Produzione oraria con tempo reale (`status.py`)
+- Calcolo M/h basato su delta timestamp ISO tra cicli consecutivi
+- Non più diviso per durata ciclo — misura il tempo reale tra le letture OCR
+- Storico cicli con `ts_iso` per gestire gap da interruzioni bot
+
+### Dashboard aggiornata
+- Label task in inglese: Alliance Gifts / Alliance Messages / VIP Daily Rewards / Radar Show / Supply Resources
+- Layout 2 colonne sezione parametri globali
+- Refresh 10s (era 3s)
+- Colonna Fascia oraria con time picker
+
+### Allocation ratio aggiornato
+- Default: campo 35% / segheria 35% / petrolio 18.75% / acciaio 11.25% (era 6.25%)
+- Configurabile dalla dashboard senza riavvio
 
 ---
 ## ✅ Versione v5.18 (selezione livello nodo + produzione oraria dashboard)
-
-### Selezione livello nodo (`raccolta.py`)
-- **Livello nodo configurabile per istanza** (5/6/7) con default 6, modificabile dalla dashboard senza riavvio
-- Reset garantito: 6 tap su `—` portano sempre a Lv.1 indipendentemente dal livello dell'ultima ricerca
-- Coordinate assolute misurate su screenshot reali 960x540 per tutti i tipi — necessario perché il popup del petrolio è clamped al bordo destro dello schermo
-- OCR livello dal titolo popup nodo per scartare nodi sotto-livello (pattern IT/EN)
-- OCR risorse inizio ciclo: retry con backoff crescente 2s → 3s → 4s (era singolo retry fisso)
-
-### Livello per istanza (`config.py`)
-- Campo `"livello": 6` aggiunto a tutte le istanze BlueStacks e MuMuPlayer
-- Sovrascrivibile da `runtime.json` via dashboard senza modificare `config.py`
-
-### Dashboard produzione oraria (`dashboard.html`)
-- Nuovo pannello **Produzione oraria** in sidebar: M/h ciclo corrente + media storica ultimi 10 cicli
-- Produzione oraria visibile nella card di ogni istanza (tutte e 4 le risorse + totale M/h)
-- Nuova colonna M/h nello storico cicli
-- Colonna **Lv.** nella tabella runtime istanze con select 5/6/7
-
-### Backend (`dashboard_server.py`, `runtime.py`)
-- `config_istanze.json` espone il campo `livello` per BS e MuMu
-- `istanze_attive()` applica l'override `livello` da `runtime.json`
+- Livello nodo configurabile per istanza (5/6/7), modificabile dalla dashboard
+- OCR risorse: retry con backoff crescente 2s→3s→4s
+- Dashboard: colonna Lv., pannello produzione oraria M/h
 
 ---
 ## ✅ Versione v5.17 (fix raccolta + robustezza)
+- BUG1/BUG3/BUG4 raccolta, contatore reale, OCR retry, log rotation
 
-### Bug fix raccolta (`raccolta.py`)
-- **BUG1** — Attesa nodo blacklist ora avviene in mappa pulita (BACK prima del `sleep`) invece che con UI aperta, eliminando tap fuori contesto al CERCA successivo
-- **BUG3** — Uscita immediata dal loop quando tutti i tipi pianificati sono bloccati; il bot prova automaticamente i tipi alternativi (`campo/segheria/petrolio/acciaio`) prima di arrendersi
-- **BUG4** — Recovery post-marcia fallita usa `back_rapidi_e_stato(n=4)` invece di 1 solo BACK, garantendo UI pulita tra un tentativo e il successivo
-- **Contatore reale** — A fine ciclo viene riletto il contatore reale dal gioco; se ci sono slot liberi (OCR iniziale impreciso) il bot riprende la raccolta con sequenza fresca
-- **OCR risorse** — Retry se anche una sola risorsa principale è `-1` (prima solo se pomodoro+legno entrambi assenti)
-- **Stabilizzazione contatore** — `sleep(2s)` dopo `vai_in_mappa` per dare tempo al widget squadre di renderizzarsi
+---
+## 🏗️ Architettura
 
-### Fix navigazione (`stato.py`)
-- `vai_in_mappa` tenta 2 BACK per chiudere banner/popup che coprono il pulsante mappa prima del secondo tentativo tap
+### Flusso coordinate UI
+```
+config.py (costanti) → coords.py (UICoords.da_ist) → moduli operativi
+```
+Tutti i moduli ricevono `coords: UICoords` — nessuno legge `config.*` direttamente per le coordinate.
 
-### Fix alleanza (`alleanza.py`)
-- Verifica stato home prima di iniziare la sequenza tap (messaggi poteva lasciare UI aperta)
-- Fix bug `ist[5]` su dict — usava indice lista invece di `ist.get("layout")`
-- Timing tap Alleanza e Dono aumentato da 1.5s a 2.0s
+### Flusso configurazione runtime
+```
+config.py (default) → runtime.json (overrides) → runtime.applica() → config.* in memoria
+```
+Ogni ciclo rilegge `runtime.json` — modifiche dalla dashboard effettive al ciclo successivo.
 
-### Cleanup processi (`mumu.py`)
-- Cleanup fine ciclo ora killa anche `MuMuVMM.exe` (frontend VM headless che rimaneva in memoria)
+### Flusso task periodici
+```
+scheduler.deve_eseguire() → modulo.esegui_*() → scheduler.registra_esecuzione()
+```
+Stato persistito in `istanza_stato_{nome}_{porta}.json` per istanza.
 
-### Log (`log.py`)
-- Rotazione `bot.log` per ciclo: il log del ciclo precedente viene archiviato in `debug/ciclo_NNN/bot.log` e `bot.log` viene resettato a ogni nuovo ciclo
-
-### Sviluppo in sospeso — Bridge pubblico (`claude_bridge.py`)
-Sviluppato ma **non funzionante** nell'attuale configurazione. Obiettivo: esporre la dashboard e il log via URL pubblico per accesso remoto (telefono, browser esterno) e analisi in tempo reale da Claude.
-
-Tentativi effettuati:
-- **ngrok** — tunnel attivo ma dominio `*.ngrok-free.dev` non raggiungibile da Claude (non in allowlist)
-- **localhost.run** — tunnel SSH attivo (`*.lhr.life`) ma stesso problema di allowlist
-- **Cloudflare Tunnel** — dominio `*.trycloudflare.com` ancora bloccato
-- **Proxy locale con token auth** — implementato correttamente, il problema è a monte nel tunnel
-
-Il file `claude_bridge.py` è incluso nel repo come base per sviluppi futuri. La dashboard locale su `http://localhost:8080/dashboard.html` funziona correttamente senza bridge.
+### File principali
+| File | Ruolo |
+|---|---|
+| `main.py` | Loop principale, pool semaforo, selezione emulatore |
+| `config.py` | Tutte le costanti e coordinate UI |
+| `coords.py` | `UICoords` — coordinate risolte per istanza |
+| `runtime.py` | Overrides runtime, fascia oraria, istanze attive |
+| `raccolta.py` | Logica raccolta risorse, blacklist nodi, allocation |
+| `allocation.py` | Algoritmo gap per sequenza ottimale nodi |
+| `daily_tasks.py` | Task periodici: VIP, Radar Show |
+| `radar_show.py` | Radar Station — riconoscimento pallini con numpy |
+| `status.py` | Scrittura status.json per dashboard |
+| `scheduler.py` | Schedulazione task per istanza |
+| `alleanza.py` | Raccolta doni alleanza |
+| `rifornimento.py` | Invio risorse all'alleanza |
 
 ### Note repository
-- I file JSON runtime/stato **non sono versionati**
-- I PNG sono versionati **solo** in `templates/`
-- Log, debug e output runtime esclusi tramite `.gitignore`
+- File JSON runtime/stato **non versionati**
+- PNG versionati **solo** in `templates/`
+- Log, debug, output runtime esclusi via `.gitignore`
 
 ---
 ## 📄 Licenza
