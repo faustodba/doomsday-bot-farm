@@ -91,6 +91,7 @@ def _default() -> dict:
             "MESSAGGI_ABILITATI":             getattr(config, "MESSAGGI_ABILITATI", True),
             "DAILY_VIP_ABILITATO":            getattr(config, "DAILY_VIP_ABILITATO", True),
             "DAILY_RADAR_ABILITATO":          getattr(config, "DAILY_RADAR_ABILITATO", True),
+            "RADAR_CENSUS_ABILITATO":         getattr(config, "RADAR_CENSUS_ABILITATO", False),
             "RIFORNIMENTO_ABILITATO":         getattr(config, "RIFORNIMENTO_ABILITATO", True),
             "RIFORNIMENTO_SOGLIA_CAMPO_M":    getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M",    5.0),
             "RIFORNIMENTO_SOGLIA_LEGNO_M":    getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M",    5.0),
@@ -247,6 +248,8 @@ def applica(rt: dict):
         config.DAILY_VIP_ABILITATO = bool(g["DAILY_VIP_ABILITATO"])
     if "DAILY_RADAR_ABILITATO" in g:
         config.DAILY_RADAR_ABILITATO = bool(g["DAILY_RADAR_ABILITATO"])
+    if "RADAR_CENSUS_ABILITATO" in g:
+        config.RADAR_CENSUS_ABILITATO = bool(g["RADAR_CENSUS_ABILITATO"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
     if "RIFORNIMENTO_SOGLIA_CAMPO_M" in g:

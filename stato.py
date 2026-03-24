@@ -23,9 +23,10 @@ DELAY_POST_BACK = 0.5   # pausa stabilizzazione UI dopo l'ultimo BACK
 MAX_CICLI_BACK  = 4     # max 4 × N_BACK = 20 BACK totali prima di arrendersi
 
 # --- Massimo tentativi tap per vai_in_mappa ---
-MAX_TENTATIVI_MAPPA = 3  # dopo 3 tap falliti -> ritorna False con certezza
+MAX_TENTATIVI_MAPPA = 3  # dopo 3 tap falliti → ritorna False con certezza
 
 # --- BACK preventivi in assicura_home() per chiudere banner fullscreen ---
+# Attivati solo se lo stato iniziale NON è home (evita di aprire popup uscita)
 N_BACK_ASSICURA     = 3    # numero di BACK preventivi
 DELAY_BACK_ASSICURA = 0.4  # secondi tra un BACK e il successivo
 
@@ -319,11 +320,8 @@ def vai_in_home(porta: str, nome: str, logger=None, conferme: int = 3) -> bool:
 def assicura_home(porta: str, nome: str, logger=None, contesto: str = "") -> bool:
     """
     Verifica che l'istanza sia in HOME prima di eseguire un task.
-
-    STRATEGIA ANTI-BANNER:
-      Manda sempre N_BACK_ASSICURA BACK preventivi prima di rilevare lo stato.
-      I banner fullscreen (eventi, notifiche, promozioni) vengono chiusi dai BACK
-      prima che rileva() venga chiamata, evitando falsi positivi "home".
+    Se già in home → ritorna True immediatamente (nessuna azione).
+    Se in mappa/overlay → tenta vai_in_home() con 2 conferme.
 
     Parametri:
       porta    : porta ADB istanza
@@ -340,9 +338,16 @@ def assicura_home(porta: str, nome: str, logger=None, contesto: str = "") -> boo
 
     prefisso = f"[PRE-{contesto}] " if contesto else "[PRE] "
 
-    # BACK preventivi: chiude banner fullscreen prima di leggere lo stato.
-    # Necessario perché i banner coprono tutta la UI e vengono classificati
-    # erroneamente come "home" dal pixel check.
+    # Prima lettura veloce: se già in home senza banner → ritorna subito.
+    # NON mandiamo BACK qui perché in home il BACK apre il popup "Uscire dal gioco?"
+    # che verrebbe classificato come overlay, causando un ciclo inutile.
+    s, _ = rileva(porta)
+    if s == "home":
+        return True
+
+    # Stato non-home: manda BACK preventivi per chiudere banner fullscreen
+    # che coprono tutta la UI e vengono classificati erroneamente come "home".
+    log(f"{prefisso}stato '{s}' — invio BACK anti-banner prima di procedere")
     for _ in range(N_BACK_ASSICURA):
         adb.keyevent(porta, "KEYCODE_BACK")
         time.sleep(DELAY_BACK_ASSICURA)
@@ -352,7 +357,7 @@ def assicura_home(porta: str, nome: str, logger=None, contesto: str = "") -> boo
     if s == "home":
         return True
 
-    log(f"{prefisso}stato '{s}' — porto in home prima di procedere")
+    log(f"{prefisso}stato '{s}' — porto in home")
     ok = vai_in_home(porta, nome, logger, conferme=2)
     if not ok:
         log(f"{prefisso}impossibile raggiungere home — task '{contesto}' saltato")
