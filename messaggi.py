@@ -18,6 +18,7 @@ import time
 import adb
 import config
 import scheduler
+import stato as _stato
 
 
 def raccolta_messaggi(porta: str, nome: str, logger=None) -> bool:
@@ -40,6 +41,10 @@ def raccolta_messaggi(porta: str, nome: str, logger=None) -> bool:
     # Verifica schedulazione — salta se già eseguito entro l'intervallo
     if not scheduler.deve_eseguire(nome, porta, "messaggi", logger):
         return True
+
+    # Verifica stato: deve essere in home prima di procedere
+    if not _stato.assicura_home(porta, nome, logger, "Messaggi"):
+        return False
 
     try:
         log("Inizio raccolta messaggi")

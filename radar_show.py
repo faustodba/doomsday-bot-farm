@@ -32,6 +32,7 @@ from PIL import Image
 
 import adb
 import config
+import stato as _stato
 
 
 # ------------------------------------------------------------------------------
@@ -185,6 +186,11 @@ def esegui_radar_show(porta: str, nome: str, coords=None, logger=None) -> bool:
         if logger: logger(nome, msg)
 
     tap_icona = coords.tap_radar_icona if coords else config.TAP_RADAR_ICONA
+
+    # Verifica stato: deve essere in home prima di procedere
+    if not _stato.assicura_home(porta, nome, logger, "Radar"):
+        log("RADAR: impossibile raggiungere home — skip")
+        return False
 
     try:
         # --- Verifica badge in home ---

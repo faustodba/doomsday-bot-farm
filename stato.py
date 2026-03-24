@@ -23,7 +23,11 @@ DELAY_POST_BACK = 0.5   # pausa stabilizzazione UI dopo l'ultimo BACK
 MAX_CICLI_BACK  = 4     # max 4 × N_BACK = 20 BACK totali prima di arrendersi
 
 # --- Massimo tentativi tap per vai_in_mappa ---
-MAX_TENTATIVI_MAPPA = 3  # dopo 3 tap falliti → ritorna False con certezza
+MAX_TENTATIVI_MAPPA = 3  # dopo 3 tap falliti -> ritorna False con certezza
+
+# --- BACK preventivi in assicura_home() per chiudere banner fullscreen ---
+N_BACK_ASSICURA     = 3    # numero di BACK preventivi
+DELAY_BACK_ASSICURA = 0.4  # secondi tra un BACK e il successivo
 
 # ------------------------------------------------------------------------------
 # Rileva stato corrente (senza screenshot: usa screen già scattato)
@@ -266,9 +270,25 @@ def vai_in_home(porta: str, nome: str, logger=None, conferme: int = 3) -> bool:
         if s == "home":
             consecutive += 1
             if consecutive >= conferme:
-                log(f"In home confermato ({conferme}x)")
-                return True
-            time.sleep(0.5)
+                # Pausa stabilizzazione UI prima del re-check finale
+                time.sleep(1.0)
+                s_finale, _ = rileva(porta)
+                if s_finale == "home":
+                    log(f"In home confermato ({conferme}x)")
+                    return True
+                # Falsa conferma: lo stato è cambiato durante la transizione
+                log(f"In home confermato ({conferme}x) ma re-check finale = '{s_finale}' — riprendo")
+                consecutive = 0
+                if s_finale == "mappa":
+                    adb.tap(porta, getattr(config, "TAP_TOGGLE_HOME_MAPPA", (38, 505)), delay_ms=0)
+                    time.sleep(3.0)
+                elif s_finale not in ("home",):
+                    s_finale = _pulisci_overlay(porta, nome, logger)
+                    if s_finale == "fallito":
+                        log("Overlay persistente dopo re-check - abbandono")
+                        return False
+            else:
+                time.sleep(0.5)
         elif s in ("mappa",):
             consecutive = 0
             log(f"Stato {s} - toggle verso home")
@@ -285,6 +305,59 @@ def vai_in_home(porta: str, nome: str, logger=None, conferme: int = 3) -> bool:
 
     log("Impossibile confermare home")
     return False
+
+# ------------------------------------------------------------------------------
+# Verifica pre-task: assicura che l'istanza sia in HOME prima di eseguire
+# un qualsiasi task (messaggi, VIP, radar, rifornimento, alleanza...).
+#
+# Da chiamare come prima istruzione in ogni entry-point di modulo task.
+# Sostituisce il pattern ripetuto: rileva() + vai_in_home() in ogni modulo.
+#
+# Ritorna True se in home (o portata in home con successo).
+# Ritorna False se impossibile raggiungere home — il task deve abortire.
+# ------------------------------------------------------------------------------
+def assicura_home(porta: str, nome: str, logger=None, contesto: str = "") -> bool:
+    """
+    Verifica che l'istanza sia in HOME prima di eseguire un task.
+
+    STRATEGIA ANTI-BANNER:
+      Manda sempre N_BACK_ASSICURA BACK preventivi prima di rilevare lo stato.
+      I banner fullscreen (eventi, notifiche, promozioni) vengono chiusi dai BACK
+      prima che rileva() venga chiamata, evitando falsi positivi "home".
+
+    Parametri:
+      porta    : porta ADB istanza
+      nome     : nome istanza per il log
+      logger   : callable(nome, msg) oppure None
+      contesto : stringa descrittiva per il log (es. "VIP", "Messaggi", "Radar")
+
+    Ritorna:
+      True  → istanza confermata in home, task può procedere
+      False → impossibile raggiungere home, task deve abortire
+    """
+    def log(msg):
+        if logger: logger(nome, msg)
+
+    prefisso = f"[PRE-{contesto}] " if contesto else "[PRE] "
+
+    # BACK preventivi: chiude banner fullscreen prima di leggere lo stato.
+    # Necessario perché i banner coprono tutta la UI e vengono classificati
+    # erroneamente come "home" dal pixel check.
+    for _ in range(N_BACK_ASSICURA):
+        adb.keyevent(porta, "KEYCODE_BACK")
+        time.sleep(DELAY_BACK_ASSICURA)
+    time.sleep(DELAY_POST_BACK)
+
+    s, _ = rileva(porta)
+    if s == "home":
+        return True
+
+    log(f"{prefisso}stato '{s}' — porto in home prima di procedere")
+    ok = vai_in_home(porta, nome, logger, conferme=2)
+    if not ok:
+        log(f"{prefisso}impossibile raggiungere home — task '{contesto}' saltato")
+    return ok
+
 
 # ------------------------------------------------------------------------------
 # Conta squadre via OCR - con N letture per robustezza

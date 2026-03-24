@@ -41,6 +41,8 @@ _DEFAULT_ORE = {
     "messaggi": 12,
     "alleanza":  12,
     "vip":       24,
+    "radar":     12,
+    "zaino":    168,  # 7 giorni — settimanale
 }
 
 _TS_FMT = "%Y-%m-%dT%H:%M:%S"

@@ -6,171 +6,228 @@
 #    - vip   : ritira ricompense VIP giornaliere (cassaforte + claim free daily)
 #    - radar : raccoglie ricompense Radar Station (pallini rossi sulla mappa)
 #
-#  Flusso VIP (da home) — macchina a 2 stati:
-#    STATO 1 — CASSAFORTE (coordinate fisse):
-#      1. Tap badge VIP → apre maschera
-#      2. Tap Claim cassaforte (830, 160)
-#      3. Tap centro popup (480, 270) per dismissare report ricompense
+#  Flusso VIP (da home) — macchina a 3 stati con riconoscimento pallino rosso:
 #
-#    STATO 2 — CLAIM FREE (template matching):
-#      1. Screenshot + cerca template da config.get_btn_claim_free_template(ist)
-#         nella zona CLAIM_FREE_ZONA
-#      2. Se trovato → tap → attendi → BACK → return True
-#      3. Se non trovato (già ritirato) → BACK → return True
-#      4. Max 2 retry con attesa 1s tra un tentativo e l'altro
+#    STATO 0 — APERTURA MASCHERA:
+#      1. Tap badge VIP (85, 52) → apre maschera VIP
+#      2. Attendi 2.0s caricamento
 #
-#  Template configurati in config.py:
-#    VIP_CLAIM_FREE_TEMPLATE     = "templates/btn_claim_free_it.png"  ⚠️ MANCANTE
-#    VIP_CLAIM_FREE_TEMPLATE_EN  = "templates/btn_claim_free_en.png"
+#    STATO 1 — CASSAFORTE (riconoscimento pallino rosso):
+#      1. Screenshot → cerca pallino rosso in CASSAFORTE_BADGE_ZONA (810,130,900,195)
+#      2. Se trovato  → tap (830, 160) → attendi → dismiss popup
+#      3. Se assente  → skip (già ritirato oggi)
+#
+#    STATO 2 — CLAIM FREE (riconoscimento pallino rosso):
+#      1. Screenshot → cerca pallino rosso in CLAIM_FREE_BADGE_ZONA (630,450,730,515)
+#      2. Se trovato  → tap centro zona → attendi → dismiss popup
+#      3. Se assente  → skip (già ritirato oggi)
+#      4. BACK → torna in home
+#
+#  Logica pallino rosso:
+#    Stessa tecnica usata in radar_show.py:
+#    maschera pixel rossi (R > R_MIN, G < G_MAX, B < B_MAX),
+#    conta pixel → se >= BADGE_PX_MIN il badge è presente.
+#    Zona più piccola = meno falsi positivi rispetto al template matching.
+#
+#  Configurazione (config.py / runtime.json):
+#    DAILY_VIP_ABILITATO      (bool, default True)
+#    DAILY_RADAR_ABILITATO    (bool, default True)
 #
 #  Schedulazione: integrata in scheduler.py (task "vip", intervallo 24h)
 #  Stato: sezione "schedule" del file istanza_stato_{nome}_{porta}.json
 #
 #  Coordinate (960x540):
-#    TAP_VIP_BADGE            = (85,  52)   — badge VIP in home
-#    TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  — Claim cassaforte (badge rosso)
+#    TAP_VIP_BADGE            = (85,  52)   — badge VIP in home → apre maschera
+#    TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  — Claim cassaforte
 #    TAP_VIP_POPUP_DISMISS    = (480, 270)  — centro popup report ricompense
-#    CLAIM_FREE_ZONA          = (500, 425, 625, 465) — zona ricerca template CLAIM verde
+#    CASSAFORTE_BADGE_ZONA    = (810, 130, 900, 195)  — zona pallino rosso cassaforte
+#    CLAIM_FREE_BADGE_ZONA    = (630, 450, 730, 515)  — zona pallino rosso claim free
+#
+#  NOTE:
+#    - Il pulsante a pagamento (€99.99) NON viene mai toccato.
+#      Entrambe le zone riconosciute (cassaforte + claim free) escludono
+#      deliberatamente l'area del pulsante premium.
+#    - Il bug fix V5.20: aggiunto BACK prima di vai_in_home nel finally.
 # ==============================================================================
 
 import os
 import time
-import cv2
+import numpy as np
+from PIL import Image
+
 import adb
 import scheduler
 import config
+import stato as _stato
 import radar_show as _radar
 
 # --- Coordinate maschera VIP ---
-TAP_VIP_BADGE            = (85,  52)   # centro scritta "VIP N" in home → apre maschera
+TAP_VIP_BADGE            = (85,  52)   # badge VIP in home → apre maschera
 TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  # Claim cassaforte (in alto a destra)
 TAP_VIP_POPUP_DISMISS    = (480, 270)  # centro popup report ricompense → dismissione
 
-# --- Template matching CLAIM verde ---
-CLAIM_FREE_ZONA   = (500, 425, 625, 465)  # zona di ricerca 960x540
-CLAIM_FREE_SOGLIA = 0.80                  # soglia match
+# --- Zone riconoscimento pallino rosso ---
+# Zona cassaforte: area intorno al cofanetto in alto a destra nella maschera VIP
+# Calibrata su vip_7.png (960x540): cofanetto a ~(860,160), badge rosso in alto a dx
+CASSAFORTE_BADGE_ZONA = (810, 130, 900, 195)
 
-CLAIM_FREE_RETRY    = 2     # tentativi di ricerca template
-CLAIM_FREE_RETRY_MS = 1000  # attesa tra retry (ms)
+# Zona claim free: area intorno alla card "Claim Free Daily"
+# Calibrata su vip_4.png / vip_7.png: card a sinistra, badge rosso sull'icona card
+CLAIM_FREE_BADGE_ZONA = (630, 450, 730, 515)
+
+# --- Parametri rilevamento pallino rosso (condivisi con radar_show.py) ---
+BADGE_R_MIN  = getattr(config, "RADAR_BADGE_R_MIN",  150)
+BADGE_G_MAX  = getattr(config, "RADAR_BADGE_G_MAX",  80)
+BADGE_B_MAX  = getattr(config, "RADAR_BADGE_B_MAX",  80)
+BADGE_PX_MIN = 5   # pixel rossi minimi per considerare il badge presente
+
+# Retry per lettura badge (in caso di screenshot instabile)
+BADGE_RETRY     = 2
+BADGE_RETRY_S   = 0.8   # secondi tra retry
 
 
 # ------------------------------------------------------------------------------
-# Utility template matching — stesso pattern di rifornimento.py
+# Rilevamento pallino rosso — nucleo algoritmo
+# Stessa logica di radar_show._ha_badge_radar(), generalizzata per zona arbitraria
 # ------------------------------------------------------------------------------
 
-def _trova_template(screen_path: str, template_path: str,
-                    zona=None, soglia: float = 0.75):
+def _ha_badge_rosso(screen_path: str, zona: tuple) -> bool:
     """
-    Cerca template_path in screen_path (opzionalmente limitato a zona=(x1,y1,x2,y2)).
-    Ritorna (cx, cy) coordinate assolute del centro del match, oppure None.
+    Verifica se esiste un pallino rosso (badge notifica) nella zona specificata.
+
+    Parametri:
+      screen_path : path screenshot 960x540
+      zona        : (x1, y1, x2, y2) — area di ricerca assoluta
+
+    Ritorna:
+      True  → badge presente (>=BADGE_PX_MIN pixel rossi trovati)
+      False → badge assente
+      True  → in caso di errore (fail-safe: meglio tappare che saltare)
     """
-    if not screen_path or not os.path.exists(screen_path):
-        return None
-    if not template_path or not os.path.exists(template_path):
-        return None
-
-    img  = cv2.imread(screen_path)
-    tmpl = cv2.imread(template_path)
-    if img is None or tmpl is None:
-        return None
-
-    offset_x, offset_y = 0, 0
-    if zona:
+    try:
+        img = Image.open(screen_path)
+        arr = np.array(img)
         x1, y1, x2, y2 = zona
-        img = img[y1:y2, x1:x2]
-        offset_x, offset_y = x1, y1
+        roi = arr[y1:y2, x1:x2, :3]
 
-    result = cv2.matchTemplate(img, tmpl, cv2.TM_CCOEFF_NORMED)
-    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        r = roi[:, :, 0].astype(int)
+        g = roi[:, :, 1].astype(int)
+        b = roi[:, :, 2].astype(int)
 
-    if max_val < soglia:
-        return None
+        rossi = ((r > BADGE_R_MIN) & (g < BADGE_G_MAX) & (b < BADGE_B_MAX))
+        return int(rossi.sum()) >= BADGE_PX_MIN
 
-    th, tw = tmpl.shape[:2]
-    cx = max_loc[0] + tw // 2 + offset_x
-    cy = max_loc[1] + th // 2 + offset_y
-    return (cx, cy)
+    except Exception:
+        return True  # fail-safe
+
+
+def _leggi_badge_con_retry(porta: str, zona: tuple, label: str, log_fn) -> bool:
+    """
+    Scatta screenshot con retry e verifica badge rosso nella zona.
+    Ritorna True se badge trovato, False se assente dopo tutti i retry.
+    """
+    for tentativo in range(1, BADGE_RETRY + 1):
+        screen = adb.screenshot(porta)
+        if not screen:
+            log_fn(f"VIP {label}: screenshot fallito (tentativo {tentativo}/{BADGE_RETRY})")
+            time.sleep(BADGE_RETRY_S)
+            continue
+
+        trovato = _ha_badge_rosso(screen, zona)
+        log_fn(f"VIP {label}: badge {'TROVATO' if trovato else 'assente'} (tentativo {tentativo})")
+        return trovato
+
+    # Tutti i retry falliti per screenshot → fail-safe True
+    log_fn(f"VIP {label}: tutti gli screenshot falliti — fail-safe True")
+    return True
 
 
 # ------------------------------------------------------------------------------
-# Task VIP — ritira ricompense giornaliere (macchina a 2 stati)
+# Task VIP — ritira ricompense giornaliere (macchina a 3 stati)
 # ------------------------------------------------------------------------------
 
-def _esegui_vip(porta: str, nome: str, template_path: str, logger=None) -> bool:
+def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
     """
     Ritira le ricompense VIP giornaliere dalla home.
 
-    Flusso a 2 stati:
-      STATO 1 — CASSAFORTE: tap fissi + dismissione popup report
-      STATO 2 — CLAIM FREE: template matching con path da config
+    Flusso a 3 stati:
+      STATO 0 — APERTURA:  tap badge VIP → attendi maschera
+      STATO 1 — CASSAFORTE: riconoscimento pallino rosso + tap condizionale
+      STATO 2 — CLAIM FREE: riconoscimento pallino rosso + tap condizionale
+      CHIUSURA: BACK → home
 
+    Il pulsante a pagamento (€99.99) non viene mai toccato.
     Ritorna True se completato senza errori bloccanti.
     """
     def log(msg):
         if logger: logger(nome, msg)
 
-    if not os.path.exists(template_path):
-        log(f"VIP: template '{template_path}' mancante — skip task")
+    # Verifica stato: deve essere in home prima di aprire la maschera VIP
+    if not _stato.assicura_home(porta, nome, logger, "VIP"):
+        log("VIP: impossibile raggiungere home — skip")
         return False
 
     try:
         # ------------------------------------------------------------------
+        # STATO 0 — APERTURA MASCHERA VIP
+        # ------------------------------------------------------------------
+        log("VIP: [0/2] tap badge VIP → apertura maschera")
+        adb.tap(porta, TAP_VIP_BADGE)
+        time.sleep(2.0)   # attesa caricamento maschera
+
+        # ------------------------------------------------------------------
         # STATO 1 — CASSAFORTE
         # ------------------------------------------------------------------
-        log("VIP: [1/2] tap badge VIP")
-        adb.tap(porta, TAP_VIP_BADGE)
-        time.sleep(2.0)  # attesa apertura maschera
+        log("VIP: [1/2] verifica badge rosso cassaforte")
+        ha_cassaforte = _leggi_badge_con_retry(
+            porta, CASSAFORTE_BADGE_ZONA, "cassaforte", log
+        )
 
-        log("VIP: [1/2] tap Claim cassaforte")
-        adb.tap(porta, TAP_VIP_CLAIM_CASSAFORTE)
-        time.sleep(1.5)  # attesa animazione ricompensa
-
-        log("VIP: [1/2] dismiss popup report ricompense")
-        adb.tap(porta, TAP_VIP_POPUP_DISMISS)
-        time.sleep(1.0)  # attesa chiusura popup
+        if ha_cassaforte:
+            log("VIP: [1/2] badge cassaforte presente → tap Claim")
+            adb.tap(porta, TAP_VIP_CLAIM_CASSAFORTE)
+            time.sleep(1.5)  # attesa animazione ricompensa
+            log("VIP: [1/2] dismiss popup report ricompense")
+            adb.tap(porta, TAP_VIP_POPUP_DISMISS)
+            time.sleep(1.0)  # attesa chiusura popup
+        else:
+            log("VIP: [1/2] badge cassaforte assente → skip (già ritirato)")
 
         # ------------------------------------------------------------------
-        # STATO 2 — CLAIM FREE (template matching con retry)
+        # STATO 2 — CLAIM FREE DAILY
         # ------------------------------------------------------------------
-        claim_trovato = False
-        for tentativo in range(1, CLAIM_FREE_RETRY + 1):
-            screen = adb.screenshot(porta)
-            if not screen:
-                log(f"VIP: [2/2] screenshot fallito (tentativo {tentativo}/{CLAIM_FREE_RETRY})")
-                time.sleep(CLAIM_FREE_RETRY_MS / 1000)
-                continue
+        log("VIP: [2/2] verifica badge rosso Claim Free Daily")
+        ha_claim_free = _leggi_badge_con_retry(
+            porta, CLAIM_FREE_BADGE_ZONA, "claim_free", log
+        )
 
-            coord = _trova_template(screen, template_path,
-                                    zona=CLAIM_FREE_ZONA, soglia=CLAIM_FREE_SOGLIA)
-            if coord:
-                log(f"VIP: [2/2] CLAIM free trovato a {coord} — tap")
-                adb.tap(porta, coord)
-                time.sleep(1.5)  # attesa animazione ricompensa
-                claim_trovato = True
-                break
-            else:
-                log(f"VIP: [2/2] CLAIM free non trovato (tentativo {tentativo}/{CLAIM_FREE_RETRY})"
-                    + (" — già ritirato oggi" if tentativo == CLAIM_FREE_RETRY else " — riprovo"))
-                time.sleep(CLAIM_FREE_RETRY_MS / 1000)
-
-        if not claim_trovato:
-            log("VIP: [2/2] CLAIM free assente — cassaforte OK, free già ritirato o non disponibile")
-
-        # Chiudi maschera con BACK
-        adb.keyevent(porta, "KEYCODE_BACK")
-        time.sleep(1.0)
+        if ha_claim_free:
+            # Tappa il centro della zona claim free
+            cx = (CLAIM_FREE_BADGE_ZONA[0] + CLAIM_FREE_BADGE_ZONA[2]) // 2
+            cy = (CLAIM_FREE_BADGE_ZONA[1] + CLAIM_FREE_BADGE_ZONA[3]) // 2
+            log(f"VIP: [2/2] badge claim free presente → tap ({cx},{cy})")
+            adb.tap(porta, (cx, cy))
+            time.sleep(1.5)  # attesa animazione ricompensa
+            log("VIP: [2/2] dismiss popup report ricompense")
+            adb.tap(porta, TAP_VIP_POPUP_DISMISS)
+            time.sleep(1.0)
+        else:
+            log("VIP: [2/2] badge claim free assente → skip (già ritirato oggi)")
 
         log("VIP: ricompense giornaliere completate")
         return True
 
     except Exception as e:
         log(f"VIP: errore durante esecuzione: {e}")
+        return False
+    finally:
+        # Chiudi maschera VIP con BACK — sempre, anche in caso di errore
+        # BUG FIX V5.20: BACK qui garantisce che _run_guarded trovi HOME
         try:
             adb.keyevent(porta, "KEYCODE_BACK")
-            time.sleep(0.5)
+            time.sleep(1.0)
         except Exception:
             pass
-        return False
 
 
 # ------------------------------------------------------------------------------
@@ -184,11 +241,11 @@ def esegui_daily_tasks(porta: str, nome: str, logger=None, coords=None) -> dict:
     Chiamare da raccolta_istanza() prima di vai_in_mappa, mentre si è in home.
 
     Parametri:
-      coords: UICoords dell'istanza — usato per selezionare i template
-              lingua-dipendenti tramite coords.btn_claim_free_template
+      coords: UICoords dell'istanza (usato per radar; non più necessario per VIP
+              che ora usa il riconoscimento pallino rosso invece dei template)
 
     Ritorna dict con esito per ogni task:
-      {"vip": True/False/None}
+      {"vip": True/False/None, "radar": True/False/None}
       None = saltato (già eseguito oggi o disabilitato)
     """
     def log(msg):
@@ -199,8 +256,7 @@ def esegui_daily_tasks(porta: str, nome: str, logger=None, coords=None) -> dict:
     # --- Task VIP ---
     if getattr(config, "DAILY_VIP_ABILITATO", True):
         if scheduler.deve_eseguire(nome, porta, "vip", logger):
-            template_path = coords.btn_claim_free_template if coords else config.VIP_CLAIM_FREE_TEMPLATE_EN
-            ok = _esegui_vip(porta, nome, template_path=template_path, logger=logger)
+            ok = _esegui_vip(porta, nome, logger=logger)
             esiti["vip"] = ok
             if ok:
                 scheduler.registra_esecuzione(nome, porta, "vip")

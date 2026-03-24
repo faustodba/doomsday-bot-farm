@@ -25,6 +25,11 @@ import status as _status
 # Il gioco non può caricare in meno di questo tempo.
 ATTESA_MINIMA_CARICA = 30  # secondi
 
+# BACK da inviare dopo le 3 conferme popup per chiudere banner/overlay
+# che il gioco apre automaticamente al primo avvio (eventi, notifiche, ecc.)
+N_BACK_PULIZIA     = 5    # numero di BACK
+DELAY_BACK_PULIZIA = 0.5  # secondi tra un BACK e il successivo
+
 # ------------------------------------------------------------------------------
 # Polling popup + raccolta + chiusura istanza
 #
@@ -126,9 +131,25 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
             attesa_popup_aperto = True
 
             if conferme >= CONFERME_RICHIESTE:
-                adb.keyevent(porta, "KEYCODE_BACK")
-                time.sleep(0.6)
-                log("Gioco pronto! → avvio raccolta immediata")
+                # Chiudi il popup corrente e tutti gli eventuali overlay/banner
+                # che il gioco apre al primo avvio (eventi, notifiche, ecc.)
+                # Un singolo BACK non e' sufficiente: serve una sequenza piu' robusta.
+                for _ in range(N_BACK_PULIZIA):
+                    adb.keyevent(porta, "KEYCODE_BACK")
+                    time.sleep(DELAY_BACK_PULIZIA)
+
+                # Verifica che lo stato sia davvero home prima di procedere
+                import stato as _stato
+                s_post, _ = _stato.rileva(porta)
+                if s_post not in ("home", "mappa"):
+                    # Ancora overlay: altro giro di BACK
+                    log(f"Overlay residuo dopo pulizia (stato={s_post}) - altro giro BACK")
+                    for _ in range(N_BACK_PULIZIA):
+                        adb.keyevent(porta, "KEYCODE_BACK")
+                        time.sleep(DELAY_BACK_PULIZIA)
+                    s_post, _ = _stato.rileva(porta)
+
+                log(f"Gioco pronto! -> avvio raccolta immediata (stato={s_post})")
                 try: _status.istanza_gioco_pronto(nome)
                 except Exception: pass
                 caricata = True

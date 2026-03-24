@@ -770,15 +770,16 @@ def _leggi_capacita_camion(screen_path: str) -> int:
         return 0
 
 
-def _verifica_nome_destinatario(screen_path: str, nome_atteso: str) -> bool:
+def _verifica_nome_destinatario(screen_path: str, nome_atteso: str):
     """
     Verifica che il nome nella maschera corrisponda al destinatario atteso.
     Confronto case-insensitive, accetta match parziale (nome_atteso in testo).
+    Ritorna (ok, testo_ocr_pulito).
     """
     testo = _ocr_otsu(screen_path, OCR_NOME_DEST, psm=7)
-    # Rimuovi caratteri speciali comuni di OCR: |, _, =
-    testo = testo.replace("|", "").replace("_", "").replace("=", "").strip()
-    return nome_atteso.lower() in testo.lower()
+    testo = testo.replace('|', '').replace('_', '').replace('=', '').strip()
+    ok = nome_atteso.lower() in testo.lower()
+    return ok, testo
 
 
 # ------------------------------------------------------------------------------
@@ -921,21 +922,35 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
                      logger=None, nome: str = ""):
     """
     Legge la maschera, verifica destinatario, compila le risorse e preme VAI.
-    Ritorna (ok: bool, eta_sec: int, quota_esaurita: bool, qta_inviata: int).
+    Ritorna (ok: bool, eta_sec: int, quota_esaurita: bool, qta_inviata: int, mismatch_nome: bool).
       ok=False         → errore generico, riprova possibile
       quota_esaurita   → provviste = 0, non rientrare in questo ciclo
+      mismatch_nome    → destinatario OCR non corrisponde, retry già effettuato
     """
     def log(msg):
         if logger: logger(nome, f"[RIF] {msg}")
 
+    mismatch_nome = False
+
     screen = adb.screenshot(porta)
     if not screen:
-        return False, 0, False, 0
-
-    # Verifica nome destinatario
-    if nome_dest and not _verifica_nome_destinatario(screen, nome_dest):
-        testo_ocr = _ocr_otsu(screen, OCR_NOME_DEST, psm=7)
-        log(f"ATTENZIONE: destinatario OCR='{testo_ocr}' atteso='{nome_dest}' - procedo comunque")
+        return False, 0, False, 0, mismatch_nome
+    # Verifica nome destinatario (OBBLIGATORIO).
+    # Se mismatch: BACK + HOME e segnala al chiamante per RETRY 1
+    if nome_dest:
+        ok_nome, testo_ocr = _verifica_nome_destinatario(screen, nome_dest)
+        if not ok_nome:
+            mismatch_nome = True
+            log(f"DEST MISMATCH: destinatario OCR='{testo_ocr}' atteso='{nome_dest}' — ABORT")
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.8)
+            # Ritorno a HOME pulito (BACK+HOME)
+            try:
+                import stato as _stato
+                _stato.vai_in_home(porta, nome, logger)
+            except Exception:
+                pass
+            return False, 0, False, 0, mismatch_nome
 
     # Leggi tassa reale dalla maschera
     tassa_reale = _leggi_tassa(screen)
@@ -950,7 +965,7 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
 
     if provviste == 0:
         log("Provviste giornaliere esaurite - stop ciclo")
-        return False, 0, True, 0
+        return False, 0, True, 0, mismatch_nome
 
     # Leggi ETA e capacità camion
     eta_sec  = _leggi_eta(screen)
@@ -971,7 +986,7 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
 
     if not risorsa_scelta:
         log("Nessuna risorsa da compilare")
-        return False, 0, False, 0
+        return False, 0, False, 0, mismatch_nome
 
     log(f"Compila {risorsa_scelta}: {qta_scelta:,}")
     coord = COORD_CAMPO[risorsa_scelta]
@@ -992,15 +1007,15 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
         provviste2 = _leggi_provviste(screen2)
         if provviste2 == 0:
             log("Provviste esaurite dopo compilazione")
-            return False, 0, True, 0
+            return False, 0, True, 0, mismatch_nome
         log("VAI disabilitato per motivo sconosciuto - annullo")
         adb.keyevent(porta, "KEYCODE_BACK")
-        return False, 0, False, 0
+        return False, 0, False, 0, mismatch_nome
 
     # Tap VAI
     log("Tap VAI")
     adb.tap(porta, COORD_VAI, delay_ms=2500)
-    return True, eta_sec, False, qta_scelta
+    return True, eta_sec, False, qta_scelta, mismatch_nome
 
 
 # ------------------------------------------------------------------------------
@@ -1119,7 +1134,7 @@ def esegui_rifornimento(porta: str, nome: str,
             log("OCR deposito fallito dopo retry — skip rifornimento questo ciclo")
             break
         log(f"Deposito: " + " | ".join(
-            f"{r}={risorse_reali.get(r,-1)/1e6:.1f}M"
+            f"{r}={max(0.0, risorse_reali.get(r,-1))/1e6:.1f}M"
             for r in risorse_lista if risorse_reali.get(r,-1) >= 0
         ))
 
@@ -1128,7 +1143,7 @@ def esegui_rifornimento(porta: str, nome: str,
         for i in range(len(risorse_lista)):
             r         = risorse_lista[(idx_risorsa + i) % len(risorse_lista)]
             valore_r  = risorse_reali.get(r, -1)
-            soglia_r  = soglie.get(r, _soglia_base)
+            soglia_r  = soglie.get(r, float("inf"))
             soglia_abs = soglia_r * 1e6
             log(f"  Check {r}: valore={valore_r/1e6:.1f}M soglia={soglia_r}M → {'OK' if valore_r >= soglia_abs else 'SOTTO'}")
             if valore_r >= soglia_abs:
@@ -1145,36 +1160,72 @@ def esegui_rifornimento(porta: str, nome: str,
         # Snapshot PRE-invio: risorse già lette al passo 2 come risorse_reali
         risorse_pre = risorse_reali
 
-        # 4. Naviga alla maschera
-        if not _naviga_a_maschera(porta, logger, nome,
-                                  coord_alleanza=coord_alleanza,
-                                  btn_template=btn_template):
-            log("Navigazione fallita - interruzione rifornimento")
-            for _ in range(5):
+        # Valori di default — sovrascritti da _compila_e_invia se ok=True
+        # Inizializzati qui per evitare NameError se _naviga_a_maschera fallisce
+        # prima che _compila_e_invia venga chiamata.
+        eta_sec    = 0
+        qta_inviata = 0
+        ts_invio   = time.time()
+        stop_esterno = False  # True quando quota esaurita → esce anche dal while esterno
+
+        # 4-5. Naviga + compila/invia con RETRY 1 su mismatch nome
+        retry_nome_done = False
+        while True:
+            # Verifica stato prima di navigare: deve essere in home
+            if not stato.assicura_home(porta, nome, logger, "Rifornimento-nav"):
+                log("Rifornimento: impossibile raggiungere home prima della navigazione — interruzione")
+                stop_esterno = True
+                break
+
+            # 4. Naviga alla maschera
+            if not _naviga_a_maschera(porta, logger, nome,
+                                      coord_alleanza=coord_alleanza,
+                                      btn_template=btn_template):
+                log("Navigazione fallita - interruzione rifornimento")
+                for _ in range(5):
+                    adb.keyevent(porta, "KEYCODE_BACK")
+                    time.sleep(0.5)
+                stato.vai_in_home(porta, nome, logger)
+                break
+
+            # 5. Compila e invia
+            ts_invio = time.time()
+            ok, eta_sec, quota_esaurita, qta_inviata, mismatch_nome = _compila_e_invia(
+                porta, {risorsa_scelta: risorse_config[risorsa_scelta]},
+                nome_rifugio, logger, nome)
+
+            if quota_esaurita:
+                log("Provviste giornaliere esaurite - stop ciclo rifornimento")
+                _salva_stato(nome, porta, True)
+                log(f"Quota salvata su file: {_path_stato(nome, porta)}")
+                stato.vai_in_home(porta, nome, logger)
+                stop_esterno = True
+                break
+
+            if mismatch_nome and not retry_nome_done:
+                log("DEST MISMATCH: retry 1 — riprovo navigazione e verifica nome")
+                retry_nome_done = True
+                stato.vai_in_home(porta, nome, logger)
+                time.sleep(1.0)
+                continue
+
+            if not ok:
+                log("Invio fallito - interruzione rifornimento")
                 adb.keyevent(porta, "KEYCODE_BACK")
                 time.sleep(0.5)
-            stato.vai_in_home(porta, nome, logger)
+                stato.vai_in_home(porta, nome, logger)
+                break
+
+            # OK: esci dal retry loop e prosegui
             break
 
-        # 5. Compila e invia
-        ts_invio = time.time()
-        ok, eta_sec, quota_esaurita, qta_inviata = _compila_e_invia(
-            porta, {risorsa_scelta: risorse_config[risorsa_scelta]},
-            nome_rifugio, logger, nome)
-
-        if quota_esaurita:
-            log("Provviste giornaliere esaurite - stop ciclo rifornimento")
-            _salva_stato(nome, porta, True)
-            log(f"Quota salvata su file: {_path_stato(nome, porta)}")
-            stato.vai_in_home(porta, nome, logger)
+        # Se quota esaurita o errore bloccante → esci dal loop esterno
+        if stop_esterno:
             break
 
-        if not ok:
-            log("Invio fallito - interruzione rifornimento")
-            adb.keyevent(porta, "KEYCODE_BACK")
-            time.sleep(0.5)
-            stato.vai_in_home(porta, nome, logger)
-            break
+        # Registra spedizione solo se l'invio è andato a buon fine (qta_inviata > 0)
+        if qta_inviata <= 0:
+            continue
 
         spedizioni += 1
         eta_ar = eta_sec * 2

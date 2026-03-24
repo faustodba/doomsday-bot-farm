@@ -649,37 +649,89 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     log("Inizio raccolta risorse")
     _status.istanza_raccolta(nome)
 
+
+
+    # ------------------------------------------------------------------
+    # GUARDIE PRE/POST (Versione 1)
+    # Ogni task deve partire e finire in HOME per non contaminare il task successivo.
+    # ------------------------------------------------------------------
+    def _ensure_home(context: str) -> bool:
+        """Porta l'istanza in HOME con conferme ridotte (2x)."""
+        try:
+            ok = stato.vai_in_home(porta, nome, logger, conferme=2)
+            if not ok:
+                log(f"[GUARD] {context}: impossibile confermare HOME")
+            return ok
+        except Exception as e:
+            log(f"[GUARD] {context}: eccezione ensure_home: {e}")
+            return False
+
+    def _run_guarded(label: str, fn):
+        """Esegue fn() con PRE/POST HOME. Non alza eccezioni (fail-safe)."""
+        # PRE
+        if not _ensure_home(f"PRE {label}"):
+            log(f"[GUARD] PRE {label}: skip (HOME non raggiunta)")
+            return None
+        try:
+            return fn()
+        except Exception as e:
+            log(f"[GUARD] {label}: errore non bloccante: {e}")
+            return None
+        finally:
+            # POST
+            _ensure_home(f"POST {label}")
     import messaggi as _msg
     if getattr(config, "MESSAGGI_ABILITATI", True):
-        _msg.raccolta_messaggi(porta, nome, logger)
+        _run_guarded("Messaggi", lambda: _msg.raccolta_messaggi(porta, nome, logger))
     else:
         log("Messaggi disabilitati (MESSAGGI_ABILITATI=False) - skip")
 
     import alleanza as _all
     if getattr(config, "ALLEANZA_ABILITATA", True):
-        _all.raccolta_alleanza(porta, nome, logger, ist=ist)
+        _run_guarded("Alleanza", lambda: _all.raccolta_alleanza(porta, nome, logger, ist=ist))
     else:
         log("Alleanza disabilitata (ALLEANZA_ABILITATA=False) - skip")
 
     # --- DAILY TASKS — eseguiti in HOME, schedulazione 24h ---
     import daily_tasks as _daily
-    _daily.esegui_daily_tasks(porta, nome, logger, coords=coords)
+    _run_guarded("DailyTasks", lambda: _daily.esegui_daily_tasks(porta, nome, logger, coords=coords))
+
+    # --- ZAINO — scarico settimanale (lunedì, SE sotto soglia) ---
+    import zaino as _zaino
+    if getattr(config, "ZAINO_ABILITATO", True):
+        def _do_zaino():
+            try:
+                return _zaino.esegui_zaino(porta, nome, logger=logger)
+            except Exception as _e:
+                log(f"Zaino: errore non bloccante: {_e}")
+                return None
+        esiti_zaino = _run_guarded("Zaino", _do_zaino)
+        if esiti_zaino and isinstance(esiti_zaino, dict):
+            totale_zaino = sum(esiti_zaino.values())
+            if totale_zaino > 0:
+                log(f"Zaino: scaricato totale {totale_zaino:.2f}M")
+    else:
+        log("Zaino disabilitato (ZAINO_ABILITATO=False) - skip")
 
     # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
-    try:
-        sped = rifornimento.esegui_rifornimento(
-            porta, nome,
-            logger=logger,
-            ciclo=ciclo,
-            coord_alleanza=coords.alleanza,
-            btn_template=coords.btn_rifornimento_template,
-        )
-        if sped and sped > 0:
-            log(f"Rifornimento: {sped} spedizione/i effettuata/e")
-    except Exception as _e:
-        log(f"Rifornimento: errore non bloccante: {_e}")
+    def _do_rifornimento():
+        try:
+            return rifornimento.esegui_rifornimento(
+                porta, nome,
+                logger=logger,
+                ciclo=ciclo,
+                coord_alleanza=coords.alleanza,
+                btn_template=coords.btn_rifornimento_template,
+            )
+        except Exception as _e:
+            log(f"Rifornimento: errore non bloccante: {_e}")
+            return None
 
-    # --- CONTATORE SQUADRE in HOME — evita vai_in_mappa se slot già pieni ---
+    sped = _run_guarded("Rifornimento", _do_rifornimento)
+    if sped and isinstance(sped, int) and sped > 0:
+        log(f"Rifornimento: {sped} spedizione/i effettuata/e")
+
+# --- CONTATORE SQUADRE in HOME — evita vai_in_mappa se slot già pieni ---
     # Il widget contatore è visibile sia in home che in mappa con le stesse
     # caratteristiche. Leggerlo in home (UI stabile) è più affidabile che
     # leggerlo subito dopo la transizione home→mappa (widget lento a renderizzarsi).
@@ -891,6 +943,10 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
             if not stato.vai_in_mappa(porta, nome, logger):
                 log("Impossibile tornare in mappa - abbandono istanza")
                 return inviate
+            # Attesa extra stabilizzazione dopo transizione home→mappa:
+            # senza questa pausa _leggi_attive_con_retry legge ancora "home"
+            # e considera la marcia fallita (falso negativo).
+            time.sleep(2.0)
         elif s_post not in ("mappa", "home"):
             log(f"Post-BACK: stato '{s_post}' inatteso - reset")
             _reset_stato(porta, nome, "", squadra_n, 1, ciclo, logger)

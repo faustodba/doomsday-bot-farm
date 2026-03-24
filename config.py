@@ -295,12 +295,15 @@ SCHEDULE_ORE_MESSAGGI  = 4    # ore minime tra esecuzioni raccolta messaggi
 SCHEDULE_ORE_ALLEANZA  = 4    # ore minime tra esecuzioni raccolta alleanza
 SCHEDULE_ORE_VIP       = 24   # ore minime tra esecuzioni ricompense VIP
 SCHEDULE_ORE_RADAR     = 12   # ore minime tra esecuzioni Radar Show
+SCHEDULE_ORE_ZAINO     = 168  # ore minime tra esecuzioni zaino (7 giorni = lunedì)
 
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
 ALLEANZA_ABILITATA     = True   # False = salta raccolta doni alleanza
 MESSAGGI_ABILITATI     = True   # False = salta raccolta messaggi sistema/alleanza
 DAILY_VIP_ABILITATO    = True   # False = salta ricompense VIP giornaliere
 DAILY_RADAR_ABILITATO  = True   # False = salta Radar Show
+ZAINO_ABILITATO        = True   # False = salta scarico zaino settimanale
+ZAINO_MOLTIPLICATORE   = 2.0    # target = soglia × moltiplicatore (es. 2x = carica fino a 2× soglia)
 
 # --- Rifornimento alleanza ---
 RIFORNIMENTO_ABILITATO         = True
