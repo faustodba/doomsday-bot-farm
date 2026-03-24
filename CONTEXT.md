@@ -135,3 +135,58 @@ Tutti i task schedulati seguono lo stesso schema:
 
 ### stato.py / alleanza.py / mumu.py / log.py
 - Fix navigazione, timing, cleanup processi, rotazione log
+
+---
+
+## 2026-03-24 — V5.20 (zaino settimanale + fix banner/stato)
+
+### zaino.py (nuovo modulo)
+- Task settimanale: scarica risorse dallo zaino/backpack quando sotto soglia
+- Trigger: ogni lunedì (SCHEDULE_ORE_ZAINO=168h), solo se almeno una risorsa < soglia
+- Target: soglia × ZAINO_MOLTIPLICATORE (default 2×)
+- Strategia: pezzature piccole prima; usa MAX se pezzatura ≤ gap residuo; pack misti ignorati
+- Apertura: TAP_ZAINO_APRI=(430,18) barra alta → sidebar sempre su Food al primo tap
+- Sidebar risorse: Food(80,130) Wood(80,200) Steel(80,270) Oil(80,340)
+- Griglia pack: USE_X=722, MAX_X=601, prima riga Y=140, altezza righe 80px
+- Chiusura: tap X=(783,68)
+- Risorse gestite in ordine: acciaio → petrolio → legno → pomodoro (solo quelle sotto soglia)
+
+### stato.py
+- `assicura_home()`: aggiunto BACK preventivi (N_BACK_ASSICURA=3, DELAY_BACK_ASSICURA=0.4s)
+  prima di `rileva()` — chiude banner fullscreen che venivano classificati erroneamente come "home"
+- `vai_in_home()`: aggiunto re-check finale con sleep(1.0) dopo N conferme consecutive
+  per evitare false conferme durante transizioni mappa→home
+- Nuove costanti: N_BACK_ASSICURA, DELAY_BACK_ASSICURA
+
+### emulatore_base.py
+- Dopo le 3 conferme popup caricamento: sostituito singolo BACK+0.6s con sequenza
+  N_BACK_PULIZIA=5 × DELAY_BACK_PULIZIA=0.5s + verifica stato reale via stato.rileva()
+  Prima di dichiarare "Gioco pronto!" lo stato viene confermato esplicitamente
+- Aggiunto `import traceback` e `traceback.format_exc()` nel blocco except raccolta
+- Nuove costanti: N_BACK_PULIZIA, DELAY_BACK_PULIZIA
+
+### daily_tasks.py
+- VIP: aggiunto KEYCODE_BACK nel finally prima del ritorno in home (bug fix V5.20)
+- VIP: sostituito template matching CLAIM free con riconoscimento pallino rosso
+  (CLAIM_FREE_BADGE_ZONA, stessa logica di radar_show — no più dipendenza template IT/EN)
+- ⚠️ `btn_claim_free_it.png` non più necessario
+
+### rifornimento.py
+- Fix calcolo `eta_sec` (divisione per zero in edge case)
+- Fix flag `quota_esaurita` (veniva resettato incorrettamente)
+- Fix visualizzazione `-0.0M` nel log (ora mostra `0.0M`)
+- `assicura_home()` chiamato correttamente prima di ogni spedizione
+
+### raccolta.py
+- Integrazione chiamata `zaino.esegui_zaino()` nel ciclo prima di rifornimento
+- Aggiunto sleep post home→mappa per stabilizzazione UI
+
+### config.py
+- `ZAINO_ABILITATO = True`
+- `ZAINO_MOLTIPLICATORE = 2`
+- `SCHEDULE_ORE_ZAINO = 168` (7 giorni)
+- TAP_ZAINO_APRI, coordinate sidebar e griglia zaino
+
+### scheduler.py
+- `zaino: 168` aggiunto in `_DEFAULT_ORE`
+- `_ore_intervallo()` legge `SCHEDULE_ORE_ZAINO` da config

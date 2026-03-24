@@ -14,6 +14,36 @@ pip install pillow opencv-python pytesseract numpy
 Nessuna dipendenza aggiuntiva — `scipy` non è richiesto.
 
 ---
+## ✅ Versione v5.20 (zaino settimanale + fix banner/stato)
+
+### Zaino/Backpack unloader (`zaino.py` — nuovo)
+- Nuovo task settimanale (ogni 168h) — scarica risorse dallo zaino quando sotto soglia
+- Target: `soglia × ZAINO_MOLTIPLICATORE` (default 2×)
+- Strategia: pezzature piccole prima; `MAX` se pezzatura ≤ gap residuo; pack misti ignorati
+- Gestisce più risorse in sequenza nello stesso ciclo (acciaio, petrolio, legno, pomodoro)
+- Configurabile: `ZAINO_ABILITATO`, `ZAINO_MOLTIPLICATORE`, `SCHEDULE_ORE_ZAINO`
+
+### Fix anti-banner (`stato.py`)
+- `assicura_home()`: invia sempre BACK preventivi prima di rilevare lo stato
+  — i banner fullscreen venivano classificati erroneamente come "home"
+- `vai_in_home()`: aggiunto re-check finale dopo N conferme consecutive
+  — evita false conferme durante transizioni mappa→home
+
+### Fix caricamento gioco (`emulatore_base.py`)
+- Dopo le 3 conferme popup: sequenza di 5 BACK + verifica stato reale
+  prima di dichiarare "Gioco pronto!" — un singolo BACK non era sufficiente
+  a chiudere tutti i banner che si aprono all'avvio
+- Aggiunto traceback completo nel log errore raccolta
+
+### Fix VIP daily (`daily_tasks.py`)
+- BACK nel `finally` prima del ritorno in home (garantisce stato pulito)
+- Riconoscimento CLAIM free tramite pallino rosso invece di template matching
+  — rimuove dipendenza da `btn_claim_free_it.png` (mai creato)
+
+### Fix rifornimento (`rifornimento.py`)
+- Fix calcolo `eta_sec`, flag `quota_esaurita`, visualizzazione `-0.0M`
+
+---
 ## ✅ Versione v5.19 (task periodici + architettura consolidata)
 
 ### Radar Show (`radar_show.py` — nuovo)
@@ -100,7 +130,8 @@ Stato persistito in `istanza_stato_{nome}_{porta}.json` per istanza.
 | `runtime.py` | Overrides runtime, fascia oraria, istanze attive |
 | `raccolta.py` | Logica raccolta risorse, blacklist nodi, allocation |
 | `allocation.py` | Algoritmo gap per sequenza ottimale nodi |
-| `daily_tasks.py` | Task periodici: VIP, Radar Show |
+| `zaino.py` | Scarico settimanale backpack |
+| `daily_tasks.py` | Task periodici: VIP, Radar Show, Zaino |
 | `radar_show.py` | Radar Station — riconoscimento pallini con numpy |
 | `status.py` | Scrittura status.json per dashboard |
 | `scheduler.py` | Schedulazione task per istanza |
