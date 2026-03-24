@@ -656,9 +656,11 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     # Ogni task deve partire e finire in HOME per non contaminare il task successivo.
     # ------------------------------------------------------------------
     def _ensure_home(context: str) -> bool:
-        """Porta l'istanza in HOME con conferme ridotte (2x)."""
+        """Porta l'istanza in HOME prima/dopo ogni task.
+        Usa assicura_home() che include BACK anti-banner prima di rilevare lo stato.
+        """
         try:
-            ok = stato.vai_in_home(porta, nome, logger, conferme=2)
+            ok = stato.assicura_home(porta, nome, logger, context)
             if not ok:
                 log(f"[GUARD] {context}: impossibile confermare HOME")
             return ok
@@ -692,9 +694,12 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     else:
         log("Alleanza disabilitata (ALLEANZA_ABILITATA=False) - skip")
 
-    # --- DAILY TASKS — eseguiti in HOME, schedulazione 24h ---
+    # --- DAILY TASKS — ogni task wrappato da _run_guarded separato ---
+    # Questo garantisce PRE/POST home per VIP e Radar indipendentemente,
+    # evitando che lo stato sporco del VIP contamini il Radar.
     import daily_tasks as _daily
-    _run_guarded("DailyTasks", lambda: _daily.esegui_daily_tasks(porta, nome, logger, coords=coords))
+    _run_guarded("VIP",   lambda: _daily.esegui_vip_guarded(porta, nome, logger))
+    _run_guarded("Radar", lambda: _daily.esegui_radar_guarded(porta, nome, logger, coords))
 
     # --- ZAINO — scarico settimanale (lunedì, SE sotto soglia) ---
     import zaino as _zaino

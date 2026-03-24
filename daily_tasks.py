@@ -222,10 +222,12 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
         return False
     finally:
         # Chiudi maschera VIP con BACK — sempre, anche in caso di errore
-        # BUG FIX V5.20: BACK qui garantisce che _run_guarded trovi HOME
+        # Due BACK per chiudere sia eventuali popup interni che la maschera VIP
         try:
             adb.keyevent(porta, "KEYCODE_BACK")
-            time.sleep(1.0)
+            time.sleep(0.8)
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(1.2)
         except Exception:
             pass
 
@@ -266,6 +268,15 @@ def esegui_daily_tasks(porta: str, nome: str, logger=None, coords=None) -> dict:
         log("[DAILY] VIP disabilitato (DAILY_VIP_ABILITATO=False) — skip")
         esiti["vip"] = None
 
+    # --- Assicura home tra VIP e Radar ---
+    # Il finally del VIP manda KEYCODE_BACK ma potrebbe non essere sufficiente
+    # a chiudere completamente la maschera prima che Radar parta.
+    # Forziamo un assicura_home esplicito con attesa minima.
+    if not _stato.assicura_home(porta, nome, logger, "PRE-Radar"):
+        log("[DAILY] Impossibile raggiungere home prima di Radar — skip")
+        esiti["radar"] = False
+        return esiti
+
     # --- Task Radar Show ---
     if getattr(config, "DAILY_RADAR_ABILITATO", True):
         if scheduler.deve_eseguire(nome, porta, "radar", logger):
@@ -280,3 +291,49 @@ def esegui_daily_tasks(porta: str, nome: str, logger=None, coords=None) -> dict:
         esiti["radar"] = None
 
     return esiti
+
+
+# ------------------------------------------------------------------------------
+# Entry point separati per raccolta.py — ogni task ha il proprio _run_guarded
+# ------------------------------------------------------------------------------
+
+def esegui_vip_guarded(porta: str, nome: str, logger=None) -> bool:
+    """
+    Esegue solo il task VIP se schedulato e abilitato.
+    Chiamare da raccolta.py wrappato in _run_guarded("VIP", ...).
+    """
+    def log(msg):
+        if logger: logger(nome, msg)
+
+    if not getattr(config, "DAILY_VIP_ABILITATO", True):
+        log("[DAILY] VIP disabilitato — skip")
+        return True
+
+    if not scheduler.deve_eseguire(nome, porta, "vip", logger):
+        return True  # già eseguito, non è un errore
+
+    ok = _esegui_vip(porta, nome, logger=logger)
+    if ok:
+        scheduler.registra_esecuzione(nome, porta, "vip")
+    return ok
+
+
+def esegui_radar_guarded(porta: str, nome: str, logger=None, coords=None) -> bool:
+    """
+    Esegue solo il task Radar se schedulato e abilitato.
+    Chiamare da raccolta.py wrappato in _run_guarded("Radar", ...).
+    """
+    def log(msg):
+        if logger: logger(nome, msg)
+
+    if not getattr(config, "DAILY_RADAR_ABILITATO", True):
+        log("[DAILY] Radar disabilitato — skip")
+        return True
+
+    if not scheduler.deve_eseguire(nome, porta, "radar", logger):
+        return True  # già eseguito, non è un errore
+
+    ok = _radar.esegui_radar_show(porta, nome, coords=coords, logger=logger)
+    if ok:
+        scheduler.registra_esecuzione(nome, porta, "radar")
+    return ok
