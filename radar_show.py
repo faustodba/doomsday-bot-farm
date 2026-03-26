@@ -188,7 +188,7 @@ def esegui_radar_show(porta: str, nome: str, coords=None, logger=None) -> bool:
     tap_icona = coords.tap_radar_icona if coords else config.TAP_RADAR_ICONA
 
     # Verifica stato: deve essere in home prima di procedere
-    if not _stato.assicura_home(porta, nome, logger, "Radar"):
+    if not _stato.vai_in_home(porta, nome, logger):
         log("RADAR: impossibile raggiungere home — skip")
         return False
 
@@ -250,6 +250,15 @@ def esegui_radar_show(porta: str, nome: str, coords=None, logger=None) -> bool:
             time.sleep(config.RADAR_SCAN_DELAY_S)
 
         log(f"RADAR: completato — {tot_tappati} pallini tappati")
+
+        # --- Censimento icone (se abilitato) ---
+        # Eseguito dopo i pallini, mentre la mappa radar è ancora aperta.
+        # Salva crop di tutte le icone non-pallino per building del classifier.
+        try:
+            import radar_census as _census
+            _census.esegui_censimento(porta, nome, logger)
+        except Exception as _ce:
+            log(f"RADAR: census errore (non bloccante): {_ce}")
 
         # --- Chiudi e torna in home ---
         adb.keyevent(porta, "KEYCODE_BACK")

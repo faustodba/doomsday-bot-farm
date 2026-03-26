@@ -656,11 +656,9 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     # Ogni task deve partire e finire in HOME per non contaminare il task successivo.
     # ------------------------------------------------------------------
     def _ensure_home(context: str) -> bool:
-        """Porta l'istanza in HOME prima/dopo ogni task.
-        Usa assicura_home() che include BACK anti-banner prima di rilevare lo stato.
-        """
+        """Porta l'istanza in HOME prima/dopo ogni task."""
         try:
-            ok = stato.assicura_home(porta, nome, logger, context)
+            ok = stato.vai_in_home(porta, nome, logger)
             if not ok:
                 log(f"[GUARD] {context}: impossibile confermare HOME")
             return ok

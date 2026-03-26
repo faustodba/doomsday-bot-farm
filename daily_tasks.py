@@ -18,7 +18,7 @@
 #      3. Se assente  → skip (già ritirato oggi)
 #
 #    STATO 2 — CLAIM FREE (riconoscimento pallino rosso):
-#      1. Screenshot → cerca pallino rosso in CLAIM_FREE_BADGE_ZONA (630,450,730,515)
+#      1. Screenshot → cerca pallino rosso in CLAIM_FREE_BADGE_ZONA (650,270,730,320)
 #      2. Se trovato  → tap centro zona → attendi → dismiss popup
 #      3. Se assente  → skip (già ritirato oggi)
 #      4. BACK → torna in home
@@ -41,7 +41,8 @@
 #    TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  — Claim cassaforte
 #    TAP_VIP_POPUP_DISMISS    = (480, 270)  — centro popup report ricompense
 #    CASSAFORTE_BADGE_ZONA    = (810, 130, 900, 195)  — zona pallino rosso cassaforte
-#    CLAIM_FREE_BADGE_ZONA    = (630, 450, 730, 515)  — zona pallino rosso claim free
+#    CLAIM_FREE_BADGE_ZONA    = (650, 270, 730, 320)  — zona pallino rosso claim free (solo detection)
+#    TAP_VIP_CLAIM_FREE       = (575, 380)             — tap centro card Claim Free Daily
 #
 #  NOTE:
 #    - Il pulsante a pagamento (€99.99) NON viene mai toccato.
@@ -71,9 +72,15 @@ TAP_VIP_POPUP_DISMISS    = (480, 270)  # centro popup report ricompense → dism
 # Calibrata su vip_7.png (960x540): cofanetto a ~(860,160), badge rosso in alto a dx
 CASSAFORTE_BADGE_ZONA = (810, 130, 900, 195)
 
-# Zona claim free: area intorno alla card "Claim Free Daily"
-# Calibrata su vip_4.png / vip_7.png: card a sinistra, badge rosso sull'icona card
-CLAIM_FREE_BADGE_ZONA = (630, 450, 730, 515)
+# Zona claim free: SOLO per rilevare il pallino rosso nell'angolo top-right della card.
+# Calibrata su vip_6.png (960x540): badge rosso a ~(700, 295).
+# NON usare il centro di questa zona per il tap — usare TAP_VIP_CLAIM_FREE sotto.
+CLAIM_FREE_BADGE_ZONA = (650, 270, 730, 320)
+
+# Coordinata tap per attivare "Claim Free Daily" — centro della card viola.
+# Separata dalla zona badge: il pallino rosso è in alto a dx della card,
+# il pulsante attivo è il centro/corpo della card a ~(575, 380).
+TAP_VIP_CLAIM_FREE = (575, 380)
 
 # --- Parametri rilevamento pallino rosso (condivisi con radar_show.py) ---
 BADGE_R_MIN  = getattr(config, "RADAR_BADGE_R_MIN",  150)
@@ -163,7 +170,7 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
         if logger: logger(nome, msg)
 
     # Verifica stato: deve essere in home prima di aprire la maschera VIP
-    if not _stato.assicura_home(porta, nome, logger, "VIP"):
+    if not _stato.vai_in_home(porta, nome, logger):
         log("VIP: impossibile raggiungere home — skip")
         return False
 
@@ -186,10 +193,13 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
         if ha_cassaforte:
             log("VIP: [1/2] badge cassaforte presente → tap Claim")
             adb.tap(porta, TAP_VIP_CLAIM_CASSAFORTE)
-            time.sleep(1.5)  # attesa animazione ricompensa
+            time.sleep(2.5)  # attesa animazione ricompensa (aumentato per popup lenta)
             log("VIP: [1/2] dismiss popup report ricompense")
             adb.tap(porta, TAP_VIP_POPUP_DISMISS)
-            time.sleep(1.0)  # attesa chiusura popup
+            time.sleep(0.8)
+            # Secondo tap dismiss per sicurezza — se la popup è ancora aperta
+            adb.tap(porta, TAP_VIP_POPUP_DISMISS)
+            time.sleep(1.2)  # attesa chiusura popup
         else:
             log("VIP: [1/2] badge cassaforte assente → skip (già ritirato)")
 
@@ -202,11 +212,11 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
         )
 
         if ha_claim_free:
-            # Tappa il centro della zona claim free
-            cx = (CLAIM_FREE_BADGE_ZONA[0] + CLAIM_FREE_BADGE_ZONA[2]) // 2
-            cy = (CLAIM_FREE_BADGE_ZONA[1] + CLAIM_FREE_BADGE_ZONA[3]) // 2
-            log(f"VIP: [2/2] badge claim free presente → tap ({cx},{cy})")
-            adb.tap(porta, (cx, cy))
+            # Tap sul centro della card "Claim Free Daily" — NON sul badge.
+            # Il badge rosso è nell'angolo top-right della card; tapparlo
+            # elimina il pallino ma non attiva il pulsante di claim.
+            log(f"VIP: [2/2] badge claim free presente → tap {TAP_VIP_CLAIM_FREE}")
+            adb.tap(porta, TAP_VIP_CLAIM_FREE)
             time.sleep(1.5)  # attesa animazione ricompensa
             log("VIP: [2/2] dismiss popup report ricompense")
             adb.tap(porta, TAP_VIP_POPUP_DISMISS)
@@ -268,11 +278,11 @@ def esegui_daily_tasks(porta: str, nome: str, logger=None, coords=None) -> dict:
         log("[DAILY] VIP disabilitato (DAILY_VIP_ABILITATO=False) — skip")
         esiti["vip"] = None
 
-    # --- Assicura home tra VIP e Radar ---
+    # --- Torna in home tra VIP e Radar ---
     # Il finally del VIP manda KEYCODE_BACK ma potrebbe non essere sufficiente
     # a chiudere completamente la maschera prima che Radar parta.
-    # Forziamo un assicura_home esplicito con attesa minima.
-    if not _stato.assicura_home(porta, nome, logger, "PRE-Radar"):
+    # Forziamo vai_in_home esplicito con attesa minima.
+    if not _stato.vai_in_home(porta, nome, logger):
         log("[DAILY] Impossibile raggiungere home prima di Radar — skip")
         esiti["radar"] = False
         return esiti

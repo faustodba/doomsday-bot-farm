@@ -311,7 +311,7 @@ def esegui_zaino(porta: str, nome: str, logger=None) -> dict:
         return esiti
 
     # --- Verifica stato: deve essere in home ---
-    if not _stato.assicura_home(porta, nome, logger, "Zaino"):
+    if not _stato.vai_in_home(porta, nome, logger):
         log("[ZAINO] impossibile raggiungere home — skip")
         return esiti
 
@@ -388,7 +388,7 @@ def esegui_zaino(porta: str, nome: str, logger=None) -> dict:
         adb.tap(porta, TAP_ZAINO_CHIUDI)
         time.sleep(1.0)
         # Torna in home
-        _stato.assicura_home(porta, nome, logger, "Zaino-fine")
+        _stato.vai_in_home(porta, nome, logger)
 
     # --- Registra esecuzione ---
     scheduler.registra_esecuzione(nome, porta, "zaino")

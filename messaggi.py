@@ -43,7 +43,7 @@ def raccolta_messaggi(porta: str, nome: str, logger=None) -> bool:
         return True
 
     # Verifica stato: deve essere in home prima di procedere
-    if not _stato.assicura_home(porta, nome, logger, "Messaggi"):
+    if not _stato.vai_in_home(porta, nome, logger):
         return False
 
     try:

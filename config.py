@@ -254,6 +254,15 @@ STATO_CHECK_OFFSETS = [
 ]
 STATO_MIN_MAPPA_RGB_SUM = 20
 
+
+# --- Secondo sensore stato (toggle basso-sinistra: testo Region/Shelter) ---
+STATO_TOGGLE_OCR_ABILITATO = True
+STATO_TOGGLE_LABEL_ZONA = (0, 396, 228, 540)
+STATO_TOGGLE_KEY_HOME = ["REGION", "REGIONE"]
+STATO_TOGGLE_KEY_MAPPA = ["SHELTER", "RIFUGIO"]
+STATO_TOGGLE_OCR_PSM = 7
+STATO_TOGGLE_DEBUG = False
+
 # --- Popup "Uscire dal gioco?" ---
 POPUP_CHECK_X   = 480
 POPUP_CHECK_Y   = 270
@@ -302,6 +311,7 @@ ALLEANZA_ABILITATA     = True   # False = salta raccolta doni alleanza
 MESSAGGI_ABILITATI     = True   # False = salta raccolta messaggi sistema/alleanza
 DAILY_VIP_ABILITATO    = True   # False = salta ricompense VIP giornaliere
 DAILY_RADAR_ABILITATO  = True   # False = salta Radar Show
+RADAR_CENSUS_ABILITATO = False  # True = salva crop icone radar per training classifier (attivare da runtime.json)
 ZAINO_ABILITATO        = True   # False = salta scarico zaino settimanale
 ZAINO_MOLTIPLICATORE   = 2.0    # target = soglia × moltiplicatore (es. 2x = carica fino a 2× soglia)
 

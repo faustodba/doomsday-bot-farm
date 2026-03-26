@@ -14,6 +14,27 @@ pip install pillow opencv-python pytesseract numpy
 Nessuna dipendenza aggiuntiva — `scipy` non è richiesto.
 
 ---
+## 🚧 Versione v5.21 (WIP — sviluppo sospeso, da riprendere)
+
+### Modifiche completate
+- Sostituzione globale `assicura_home()` → `vai_in_home()` in tutti i moduli
+- VIP CLAIM_FREE: coordinate calibrate `CLAIM_FREE_BADGE_ZONA=(650,270,730,320)`, `TAP_VIP_CLAIM_FREE=(575,380)`
+- `rifornimento.py`: `sleep(2.5)` dopo Tap Membri per stabilizzazione UI
+- Task VIP e Radar separati in chiamate `_run_guarded()` individuali in `raccolta.py`
+- `runtime.py`: aggiunto `RADAR_CENSUS_ABILITATO`
+
+### Radar Census (`radar_census.py` — nuovo modulo)
+- Fotografa e pre-classifica icone non-dot-rosso dalla mappa
+- Dataset 34 campioni verificati (FAU_00..FAU_05)
+- Problema aperto: zombie grandi non separabili da avatar con sole feature RGB
+- Prossimo step: Random Forest (scikit-learn) + feature spaziali
+
+### ⚠️ Pending alla ripresa
+1. `allocation.py` — mapping campo→pomodoro non implementato
+2. `emulatore_base.py` — full traceback nel log errore (formattazione incompleta)
+3. Radar Census — dataset FAU_06..FAU_09 + Random Forest classifier
+
+---
 ## ✅ Versione v5.20 (zaino settimanale + fix banner/stato)
 
 ### Zaino/Backpack unloader (`zaino.py` — nuovo)
@@ -25,75 +46,49 @@ Nessuna dipendenza aggiuntiva — `scipy` non è richiesto.
 
 ### Fix anti-banner (`stato.py`)
 - `assicura_home()`: invia sempre BACK preventivi prima di rilevare lo stato
-  — i banner fullscreen venivano classificati erroneamente come "home"
 - `vai_in_home()`: aggiunto re-check finale dopo N conferme consecutive
-  — evita false conferme durante transizioni mappa→home
 
 ### Fix caricamento gioco (`emulatore_base.py`)
 - Dopo le 3 conferme popup: sequenza di 5 BACK + verifica stato reale
-  prima di dichiarare "Gioco pronto!" — un singolo BACK non era sufficiente
-  a chiudere tutti i banner che si aprono all'avvio
 - Aggiunto traceback completo nel log errore raccolta
 
 ### Fix VIP daily (`daily_tasks.py`)
-- BACK nel `finally` prima del ritorno in home (garantisce stato pulito)
-- Riconoscimento CLAIM free tramite pallino rosso invece di template matching
-  — rimuove dipendenza da `btn_claim_free_it.png` (mai creato)
+- BACK nel `finally` prima del ritorno in home
+- Riconoscimento CLAIM free tramite pallino rosso — rimuove dipendenza da template IT/EN
 
 ### Fix rifornimento (`rifornimento.py`)
 - Fix calcolo `eta_sec`, flag `quota_esaurita`, visualizzazione `-0.0M`
+- `sleep(2.5)` dopo Tap Membri
 
 ---
 ## ✅ Versione v5.19 (task periodici + architettura consolidata)
 
 ### Radar Show (`radar_show.py` — nuovo)
-- Nuovo task periodico schedulato ogni **12h**
-- Apre Radar Station dalla home, raccoglie tutte le ricompense (pallini rossi)
-- Riconoscimento pallini via **connected components numpy puro** — no scipy
-- Filtro forma circolare: compattezza > 0.55, aspect ratio > 0.5, dimensione 8-22px
-- Verifica badge rosso sull'icona prima di aprire — skip immediato se assente
-- Delay 10s post-apertura per notifiche che scorrono
-- Calibrato su dataset 9 screen reali
+- Task periodico ogni 12h — raccoglie ricompense Radar Station
+- Connected components numpy puro — no scipy
+- Verifica badge rosso prima di aprire — skip immediato se assente
 
 ### VIP Daily Rewards (`daily_tasks.py`)
-- Macchina a **2 stati**: cassaforte (coordinate fisse) + CLAIM free (template matching)
-- Template lingua-dipendente risolto da `coords.btn_claim_free_template`
-- ⚠️ `templates/btn_claim_free_it.png` mancante (BlueStacks IT)
+- Macchina a 2 stati: cassaforte + CLAIM free
+- CLAIM free ora via pixel detection (rimosso template matching IT/EN)
 
 ### Contatore squadre in HOME (`raccolta.py`)
-- Letto prima di `vai_in_mappa` — **early exit se slot pieni** senza entrare in mappa
-- Risparmio ~15-20s per istanza con slot pieni
+- Early exit se slot pieni — risparmio ~15-20s per istanza
 
-### Soglie rifornimento separate (`rifornimento.py`, `config.py`)
+### Soglie rifornimento separate
 - 4 soglie indipendenti: campo 5M / legno 5M / petrolio 2.5M / acciaio 3.5M
-- Acciaio abilitato all'invio (era escluso)
-- Configurabili dalla dashboard senza riavvio
+- Acciaio abilitato all'invio
 
-### Fascia oraria per istanza (`runtime.py`, `dashboard.html`)
-- Campo `fascia_oraria: "HH:MM-HH:MM"` per istanza negli overrides
-- `start < end` → fascia diurna | `start > end` → fascia notturna (span mezzanotte)
-- Assente o vuoto → H24 (default)
-- Dashboard: 2 time picker con checkbox on/off
+### Fascia oraria per istanza
+- Campo `fascia_oraria: "HH:MM-HH:MM"` — supporta fasce notturne (start > end)
 
 ### Produzione oraria con tempo reale (`status.py`)
-- Calcolo M/h basato su delta timestamp ISO tra cicli consecutivi
-- Non più diviso per durata ciclo — misura il tempo reale tra le letture OCR
-- Storico cicli con `ts_iso` per gestire gap da interruzioni bot
-
-### Dashboard aggiornata
-- Label task in inglese: Alliance Gifts / Alliance Messages / VIP Daily Rewards / Radar Show / Supply Resources
-- Layout 2 colonne sezione parametri globali
-- Refresh 10s (era 3s)
-- Colonna Fascia oraria con time picker
-
-### Allocation ratio aggiornato
-- Default: campo 35% / segheria 35% / petrolio 18.75% / acciaio 11.25% (era 6.25%)
-- Configurabile dalla dashboard senza riavvio
+- M/h basato su delta timestamp ISO — non più diviso per durata ciclo fissa
 
 ---
 ## ✅ Versione v5.18 (selezione livello nodo + produzione oraria dashboard)
-- Livello nodo configurabile per istanza (5/6/7), modificabile dalla dashboard
-- OCR risorse: retry con backoff crescente 2s→3s→4s
+- Livello nodo configurabile per istanza (5/6/7)
+- OCR risorse: retry con backoff 2s→3s→4s
 - Dashboard: colonna Lv., pannello produzione oraria M/h
 
 ---
@@ -133,6 +128,7 @@ Stato persistito in `istanza_stato_{nome}_{porta}.json` per istanza.
 | `zaino.py` | Scarico settimanale backpack |
 | `daily_tasks.py` | Task periodici: VIP, Radar Show, Zaino |
 | `radar_show.py` | Radar Station — riconoscimento pallini con numpy |
+| `radar_census.py` | Census icone mappa — dataset + classificazione |
 | `status.py` | Scrittura status.json per dashboard |
 | `scheduler.py` | Schedulazione task per istanza |
 | `alleanza.py` | Raccolta doni alleanza |
@@ -142,6 +138,7 @@ Stato persistito in `istanza_stato_{nome}_{porta}.json` per istanza.
 - File JSON runtime/stato **non versionati**
 - PNG versionati **solo** in `templates/`
 - Log, debug, output runtime esclusi via `.gitignore`
+- `config.py` — settings macchina-specifici, **non versionato**
 
 ---
 ## 📄 Licenza

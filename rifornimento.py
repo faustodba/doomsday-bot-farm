@@ -881,6 +881,10 @@ def _naviga_a_maschera(porta: str, logger=None, nome: str = "",
     adb.tap(porta, _coord_all, delay_ms=1500)
     log("Tap Membri")
     adb.tap(porta, COORD_MEMBRI, delay_ms=1500)
+    # Attesa esplicita rendering lista Membri: i badge R4/R3/R2/R1 appaiono
+    # con ritardo variabile (~1-3s). Senza questa attesa il primo swipe
+    # non trova badge e degrada in scroll dedicato (25 swipe inutili).
+    time.sleep(2.5)
 
     # 2. Apri tutti i toggle R4/R3/R2/R1 — cerca avatar in parallelo
     coord_tap, _ = _apri_tutti_toggle(porta, logger, nome, template_avatar)
@@ -1172,7 +1176,7 @@ def esegui_rifornimento(porta: str, nome: str,
         retry_nome_done = False
         while True:
             # Verifica stato prima di navigare: deve essere in home
-            if not stato.assicura_home(porta, nome, logger, "Rifornimento-nav"):
+            if not stato.vai_in_home(porta, nome, logger):
                 log("Rifornimento: impossibile raggiungere home prima della navigazione — interruzione")
                 stop_esterno = True
                 break

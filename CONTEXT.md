@@ -168,7 +168,8 @@ Tutti i task schedulati seguono lo stesso schema:
 ### daily_tasks.py
 - VIP: aggiunto KEYCODE_BACK nel finally prima del ritorno in home (bug fix V5.20)
 - VIP: sostituito template matching CLAIM free con riconoscimento pallino rosso
-  (CLAIM_FREE_BADGE_ZONA, stessa logica di radar_show — no più dipendenza template IT/EN)
+  (CLAIM_FREE_BADGE_ZONA=(650,270,730,320), TAP_VIP_CLAIM_FREE=(575,380))
+  (stessa logica di radar_show — no più dipendenza template IT/EN)
 - ⚠️ `btn_claim_free_it.png` non più necessario
 
 ### rifornimento.py
@@ -176,6 +177,7 @@ Tutti i task schedulati seguono lo stesso schema:
 - Fix flag `quota_esaurita` (veniva resettato incorrettamente)
 - Fix visualizzazione `-0.0M` nel log (ora mostra `0.0M`)
 - `assicura_home()` chiamato correttamente prima di ogni spedizione
+- Aggiunto `sleep(2.5)` dopo Tap Membri per stabilizzazione UI
 
 ### raccolta.py
 - Integrazione chiamata `zaino.esegui_zaino()` nel ciclo prima di rifornimento
@@ -190,3 +192,32 @@ Tutti i task schedulati seguono lo stesso schema:
 ### scheduler.py
 - `zaino: 168` aggiunto in `_DEFAULT_ORE`
 - `_ore_intervallo()` legge `SCHEDULE_ORE_ZAINO` da config
+
+---
+
+## 2026-03-26 — V5.21 WIP (in sviluppo — sessione sospesa)
+
+### Modifiche completate
+- Sostituzione globale `assicura_home()` → `vai_in_home()` in tutti i moduli
+- VIP CLAIM_FREE: coordinate calibrate `CLAIM_FREE_BADGE_ZONA=(650,270,730,320)`, `TAP_VIP_CLAIM_FREE=(575,380)`
+- `rifornimento.py`: `sleep(2.5)` dopo Tap Membri (stabilizzazione UI)
+- `raccolta.py`, `daily_tasks.py`: task VIP e Radar separati in chiamate `_run_guarded()` individuali
+- `runtime.py`: aggiunto `RADAR_CENSUS_ABILITATO`
+
+### Radar Census (`radar_census.py` — nuovo modulo)
+- Dataset 34 campioni verificati (FAU_00..FAU_05)
+- Problema aperto: zombie grandi non separabili da avatar con sole feature RGB
+- Prossimo step: Random Forest con scikit-learn + feature spaziali
+  (g_top_ratio, r_top_ratio, hue_dominante, edge_density)
+- Da completare: raccolta campioni FAU_06..FAU_09
+
+### ⚠️ PENDING — da completare alla ripresa
+1. **`allocation.py`** — mapping campo→pomodoro non ancora implementato
+2. **`emulatore_base.py`** — full traceback nel log errore (import traceback già presente, log formattato incompleto)
+3. **Radar Census** — completare dataset FAU_06..FAU_09, poi implementare Random Forest classifier
+
+### Regole di sviluppo consolidate
+- Fix bug uno alla volta da log live — nessun refactoring rename globale
+- Richiedere sempre il file attuale dal PC prima di modifiche — mai lavorare da memoria
+- Git commit file per file con `git add` esplicito
+- CONTEXT.md e README.md aggiornati prima di ogni tag
