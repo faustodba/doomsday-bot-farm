@@ -130,7 +130,7 @@ _verifica_percorsi()
 ISTANZE = [
     {"nome": "FAU_00", "interno": "Pie64_13", "porta": "5685", "truppe": 0,     "max_squadre": 5, "layout": 1, "livello": 6, "abilitata": False},
     {"nome": "FAU_01", "interno": "Pie64_6",  "porta": "5615", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
-    {"nome": "FAU_02", "interno": "Pie64",    "porta": "5555", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
+    {"nome": "FAU_02", "interno": "Pie64",    "porta": "5555", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "profilo": "raccolta_only", "abilitata": False},
     {"nome": "FAU_03", "interno": "Pie64_7",  "porta": "5625", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
     {"nome": "FAU_04", "interno": "Pie64_8",  "porta": "5635", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
     {"nome": "FAU_05", "interno": "Pie64_9",  "porta": "5645", "truppe": 12000, "max_squadre": 4, "layout": 1, "livello": 6, "abilitata": False},
@@ -142,27 +142,27 @@ ISTANZE = [
 
 # --- MuMuPlayer ---
 ISTANZE_MUMU = [
-    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "abilitata": False},
-    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "abilitata": True},
+    #{"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_02", "indice": "0", "porta": 16384, "truppe": 40000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "raccolta_only", "abilitata": True},
+    #{"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
+    #{"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "abilitata": True},
 ]
 
 # ==============================================================================
 # 4. PARAMETRI CICLO
 # ==============================================================================
 
-ISTANZE_BLOCCO         = 2      # istanze attive contemporaneamente (semaforo)
+ISTANZE_BLOCCO         = 1      # istanze attive contemporaneamente (semaforo)
 WAIT_MINUTI            = 1      # minuti di attesa tra un ciclo e l'altro
 
 # --- Raccolta risorse ---
-TRUPPE_RACCOLTA        = 10000  # truppe per squadra globale (0 = MAX)
+TRUPPE_RACCOLTA        = 40000  # truppe per squadra globale (0 = MAX)
 MAX_TENTATIVI_RACCOLTA = 2      # tentativi massimi per singola squadra
 
 # ==============================================================================
@@ -307,16 +307,16 @@ SCHEDULE_ORE_RADAR     = 12   # ore minime tra esecuzioni Radar Show
 SCHEDULE_ORE_ZAINO     = 168  # ore minime tra esecuzioni zaino (7 giorni = lunedì)
 
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
-ALLEANZA_ABILITATA     = True   # False = salta raccolta doni alleanza
-MESSAGGI_ABILITATI     = True   # False = salta raccolta messaggi sistema/alleanza
-DAILY_VIP_ABILITATO    = True   # False = salta ricompense VIP giornaliere
-DAILY_RADAR_ABILITATO  = True   # False = salta Radar Show
+ALLEANZA_ABILITATA     = False   # False = salta raccolta doni alleanza
+MESSAGGI_ABILITATI     = False   # False = salta raccolta messaggi sistema/alleanza
+DAILY_VIP_ABILITATO    = False   # False = salta ricompense VIP giornaliere
+DAILY_RADAR_ABILITATO  = False   # False = salta Radar Show
 RADAR_CENSUS_ABILITATO = False  # True = salva crop icone radar per training classifier (attivare da runtime.json)
-ZAINO_ABILITATO        = True   # False = salta scarico zaino settimanale
+ZAINO_ABILITATO        = False   # False = salta scarico zaino settimanale
 ZAINO_MOLTIPLICATORE   = 2.0    # target = soglia × moltiplicatore (es. 2x = carica fino a 2× soglia)
 
 # --- Rifornimento alleanza ---
-RIFORNIMENTO_ABILITATO         = True
+RIFORNIMENTO_ABILITATO         = False
 DOOMS_ACCOUNT                  = "FauMorfeus"
 DOOMS_AVATAR                   = "templates/avatar.png"
 RIFORNIMENTO_BTN_TEMPLATE      = "templates/btn_risorse_approv.png"       # IT

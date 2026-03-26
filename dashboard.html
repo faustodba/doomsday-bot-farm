@@ -181,6 +181,14 @@
   .rt-msg { margin-top: 8px; font-size: 11px; text-align: center; min-height: 16px; }
   .rt-msg.ok  { color: var(--green); }
   .rt-msg.err { color: var(--red); }
+  /* ── RUNTIME AVANZATE (collassate) ── */
+  .rt-adv-header { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin-top:10px; padding:6px 8px; background: rgba(96,165,250,0.06); border: 1px solid rgba(96,165,250,0.18); border-radius: 4px; }
+  .rt-adv-header:hover { background: rgba(96,165,250,0.10); }
+  .rt-adv-arrow { width: 14px; color: var(--blue); font-weight: bold; }
+  .rt-adv-title { font-size:9px; letter-spacing:2px; text-transform:uppercase; color: var(--text-mid); }
+  .rt-adv-body { margin-top:8px; padding-left:2px; }
+  .rt-adv-hint { font-size:10px; color: var(--text-dim); margin-top:-4px; margin-bottom:6px; }
+
   .ist-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
   .ist-table th { color: var(--text-dim); font-weight: normal; padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
   .ist-table td { padding: 4px 6px; border-bottom: 1px solid rgba(42,51,72,0.4); vertical-align: middle; }
@@ -345,6 +353,16 @@
         <div class="rt-row"><label>VIP Daily Rewards</label><input type="checkbox" id="rt_vip_on"></div>
         <div class="rt-row"><label>Radar Show</label><input type="checkbox" id="rt_radar_on"></div>
         <div class="rt-row"><label>Supply Resources</label><input type="checkbox" id="rt_rif_on"></div>
+ <div class="rt-row"><label>Weekly Backpack</label><input type="checkbox" id="rt_zaino_on"></div>
+
+ <div class="rt-adv-header" onclick="rtToggleAvanzate()">
+   <span class="rt-adv-arrow" id="rt_adv_arrow">▶</span>
+   <span class="rt-adv-title">Avanzate</span>
+ </div>
+ <div id="rt_adv_body" class="rt-adv-body" style="display:none">
+   <div class="rt-row"><label>Radar Census (training)</label><input type="checkbox" id="rt_radar_census_on"></div>
+   <div class="rt-adv-hint">Genera crop icone Radar per training/diagnostica. Usare solo se necessario.</div>
+ </div>
       </div>
 
       <!-- Colonna destra: soglie invio -->
@@ -377,7 +395,7 @@
     <div style="overflow-x:auto">
       <table class="ist-table">
         <thead><tr>
-          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th><th>Lv.</th><th>Fascia</th>
+          <th>On</th><th>Nome</th><th>Truppe</th><th>Sq.</th><th>Layout</th><th>Prof.</th><th>Lv.</th><th>Fascia</th>
         </tr></thead>
         <tbody id="rt_ist_tbody"></tbody>
       </table>
@@ -928,16 +946,23 @@ let _cfgIstanze  = null;  // cache config_istanze.json (istanze fresche da confi
 
 // Carica runtime.json e config_istanze.json
 async function rtCarica() {
+  // Carica runtime.json SEMPRE; se config_istanze.json fallisce, non bloccare i globali.
   try {
-    const [resRt, resCfg] = await Promise.all([
-      fetch(_url("runtime.json?t=" + Date.now())),
-      fetch(_url("config_istanze.json?t=" + Date.now())),
-    ]);
-    if (resRt.ok)  _rtData     = await resRt.json();
-    if (resCfg.ok) _cfgIstanze = await resCfg.json();
-    if (_rtData) rtPopolaGlobali(_rtData);
-    rtCaricaIstanze();
-  } catch(e) { /* server non ancora avviato */ }
+    const resRt = await fetch(_url("runtime.json?t=" + Date.now()));
+    if (resRt.ok) {
+      _rtData = await resRt.json();
+      rtPopolaGlobali(_rtData);
+    }
+  } catch(e) {}
+
+  try {
+    const resCfg = await fetch(_url("config_istanze.json?t=" + Date.now()));
+    if (resCfg.ok) {
+      _cfgIstanze = await resCfg.json();
+    }
+  } catch(e) {}
+
+  rtCaricaIstanze();
 }
 
 function rtPopolaGlobali(rt) {
@@ -948,7 +973,9 @@ function rtPopolaGlobali(rt) {
   _setChk("rt_messaggi_on",     g.MESSAGGI_ABILITATI ?? true);
   _setChk("rt_vip_on",          g.DAILY_VIP_ABILITATO ?? true);
   _setChk("rt_radar_on",        g.DAILY_RADAR_ABILITATO ?? true);
-  _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
+  _setChk("rt_zaino_on", g.ZAINO_ABILITATO ?? false);
+ _setChk("rt_radar_census_on", g.RADAR_CENSUS_ABILITATO ?? false);
+ _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
   _setVal("rt_soglia_campo",    g.RIFORNIMENTO_SOGLIA_CAMPO_M    ?? 5.0);
   _setVal("rt_soglia_legno",    g.RIFORNIMENTO_SOGLIA_LEGNO_M    ?? 5.0);
   _setVal("rt_soglia_pet",      g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
@@ -985,6 +1012,7 @@ function rtCaricaIstanze() {
     const livello     = ovr.livello     !== undefined ? ovr.livello     : (ist.livello     ?? 6);
     const fascia      = ovr.fascia_oraria !== undefined ? ovr.fascia_oraria : (ist.fascia_oraria ?? "");
     const lingua      = ist.lingua ?? "it";
+	const profilo = ovr.profilo !== undefined ? ovr.profilo : (ist.profilo ?? "full");
 
     const tr = document.createElement("tr");
     tr.dataset.nome = ist.nome;
@@ -1000,6 +1028,10 @@ function rtCaricaIstanze() {
       <td><select data-field="layout">
         <option value="1" ${layout==1?"selected":""}>1</option>
         <option value="2" ${layout==2?"selected":""}>2</option>
+      </select></td>
+      <td><select data-field="profilo">
+        <option value="full">full</option>
+        <option value="raccolta_only">raccolta_only</option>
       </select></td>
       <td><select data-field="livello">
         <option value="5" ${livello==5?"selected":""}>5</option>
@@ -1027,7 +1059,11 @@ function rtCaricaIstanze() {
         })()}
       </td>`;
 
-    // Toggle visivo opacity al cambio checkbox
+    // Imposta profilo selezionato (senza usare template ${...} per evitare ReferenceError)
+    const profiloSel = tr.querySelector('[data-field=\"profilo\"]');
+    if (profiloSel) { profiloSel.value = profilo; }
+
+// Toggle visivo opacity al cambio checkbox
     tr.querySelector('[data-field="abilitata"]').addEventListener("change", function() {
       tr.style.opacity = this.checked ? "1" : "0.45";
     });
@@ -1037,7 +1073,7 @@ function rtCaricaIstanze() {
 
   // Mostra messaggio se nessuna istanza
   if (lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text-dim);padding:8px">
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim);padding:8px">
       Nessuna istanza configurata in config.py per ${emu === "bs" ? "BlueStacks" : "MuMuPlayer"}
     </td></tr>`;
   }
@@ -1080,7 +1116,9 @@ async function rtSalvaGlobali() {
     MESSAGGI_ABILITATI:             document.getElementById("rt_messaggi_on").checked,
     DAILY_VIP_ABILITATO:            document.getElementById("rt_vip_on").checked,
     DAILY_RADAR_ABILITATO:          document.getElementById("rt_radar_on").checked,
-    RIFORNIMENTO_ABILITATO:         document.getElementById("rt_rif_on").checked,
+    ZAINO_ABILITATO: document.getElementById("rt_zaino_on").checked,
+ RADAR_CENSUS_ABILITATO: document.getElementById("rt_radar_census_on").checked,
+ RIFORNIMENTO_ABILITATO:         document.getElementById("rt_rif_on").checked,
     RIFORNIMENTO_SOGLIA_CAMPO_M:          +_val("rt_soglia_campo"),
     RIFORNIMENTO_SOGLIA_LEGNO_M:          +_val("rt_soglia_legno"),
     RIFORNIMENTO_SOGLIA_PETROLIO_M:       +_val("rt_soglia_pet"),
@@ -1118,7 +1156,8 @@ async function rtSalvaIstanze() {
     const truppe      = +(tr.querySelector('[data-field="truppe"]')?.value      ?? ist.truppe);
     const max_squadre = +(tr.querySelector('[data-field="max_squadre"]')?.value ?? ist.max_squadre);
     const layout      = +(tr.querySelector('[data-field="layout"]')?.value      ?? ist.layout);
-    const livello     = +(tr.querySelector('[data-field="livello"]')?.value     ?? (ist.livello ?? 6));
+    const livello     = +(tr.querySelector('[data-field=\"livello\"]')?.value     ?? (ist.livello ?? 6));
+    const profilo     = (tr.querySelector('[data-field=\"profilo\"]')?.value ?? (ist.profilo ?? "full"));
     const fascia_on    = tr.querySelector('[data-field="fascia_on"]')?.checked ?? false;
     const fascia_start = tr.querySelector('[data-field="fascia_start"]')?.value ?? "22:00";
     const fascia_end   = tr.querySelector('[data-field="fascia_end"]')?.value   ?? "05:00";
@@ -1131,6 +1170,7 @@ async function rtSalvaIstanze() {
     const cfg_max_squadre = ist.max_squadre ?? 4;
     const cfg_layout      = ist.layout      ?? 1;
     const cfg_livello     = ist.livello     ?? 6;
+    const cfg_profilo     = ist.profilo     ?? "full";
     const cfg_fascia      = ist.fascia_oraria ?? "";
 
     if (abilitata   !== cfg_abilitata)   delta.abilitata   = abilitata;
@@ -1138,6 +1178,7 @@ async function rtSalvaIstanze() {
     if (max_squadre !== cfg_max_squadre) delta.max_squadre = max_squadre;
     if (layout      !== cfg_layout)      delta.layout      = layout;
     if (livello     !== cfg_livello)     delta.livello     = livello;
+    if (profilo     !== cfg_profilo)     delta.profilo     = profilo;
     if (fascia      !== cfg_fascia)      delta.fascia_oraria = fascia;
 
     if (Object.keys(delta).length > 0) {
@@ -1173,6 +1214,17 @@ function _rtMsg(id, txt, ok) {
   el.textContent = txt;
   el.className = "rt-msg " + (ok ? "ok" : "err");
   setTimeout(() => { el.textContent = ""; el.className = "rt-msg"; }, 4000);
+}
+
+
+// Toggle sezione Avanzate (collassata di default)
+function rtToggleAvanzate() {
+  const body = document.getElementById("rt_adv_body");
+  const arrow = document.getElementById("rt_adv_arrow");
+  if (!body || !arrow) return;
+  const open = body.style.display !== "none";
+  body.style.display = open ? "none" : "block";
+  arrow.textContent = open ? "▶" : "▼";
 }
 
 // Carica runtime al primo avvio e poi ogni 10s

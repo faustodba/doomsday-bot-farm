@@ -319,8 +319,12 @@ def istanze_attive(rt: dict, emulatore: str) -> list:
         if "lingua"        in ovr: ist_out["lingua"]        = str(ovr["lingua"])
         if "livello"       in ovr: ist_out["livello"]       = int(ovr["livello"])
         if "fascia_oraria" in ovr: ist_out["fascia_oraria"] = str(ovr["fascia_oraria"])
+        if "profilo" in ovr: ist_out["profilo"] = str(ovr["profilo"])
 
-        # fascia_oraria: se configurata, escludi istanza fuori fascia
+        # profilo esecuzione (default: full)
+        if "profilo" not in ist_out: ist_out["profilo"] = str(ist.get("profilo", "full"))
+
+# fascia_oraria: se configurata, escludi istanza fuori fascia
         fascia = ist_out.get("fascia_oraria", "")
         if fascia and not _in_fascia(fascia):
             continue
