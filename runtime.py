@@ -1,38 +1,6 @@
 # ==============================================================================
-#  DOOMSDAY BOT V5 - runtime.py
-#  Configurazione modificabile a runtime senza riavviare il bot.
-#
-#  ARCHITETTURA:
-#    runtime.json NON contiene liste di istanze — quelle stanno in config.py.
-#    Contiene solo:
-#      - globali:   parametri ciclo modificabili (ISTANZE_BLOCCO, WAIT_MINUTI, ...)
-#      - overrides: delta per-istanza (solo ciò che l'utente ha modificato)
-#
-#    Struttura runtime.json:
-#    {
-#      "globali": { "ISTANZE_BLOCCO": 1, "WAIT_MINUTI": 1, ... },
-#      "overrides": {
-#        "FAU_09": { "abilitata": false, "max_squadre": 3 }
-#      }
-#    }
-#
-#  FLUSSO ogni ciclo:
-#    1. carica()             → legge runtime.json (globali + overrides)
-#    2. applica(rt)          → sovrascrive config.* in memoria
-#    3. istanze_attive(...)  → legge FRESH da config.py, applica overrides
-#
-#  VANTAGGI:
-#    - Aggiungere/rimuovere istanze in config.py è immediatamente visibile
-#    - Il json non contiene BS quando si usa MuMu e viceversa
-#    - Nessun merge complesso, nessuna desincronizzazione
-#    - Il json è piccolo e leggibile
-#
-#  API pubblica:
-#    carica()                      -> dict
-#    applica(rt)                   -> None
-#    istanze_attive(rt, emulatore) -> list
-#    salva(dati)                   -> bool
-#    inizializza_se_mancante()     -> None
+# DOOMSDAY BOT V5 - runtime.py
+# Configurazione modificabile a runtime senza riavviare il bot.
 # ==============================================================================
 
 import json
@@ -44,17 +12,13 @@ import config
 _lock = threading.Lock()
 _PATH = os.path.join(config.BOT_DIR, "runtime.json")
 
-
-# ==============================================================================
+# ------------------------------------------------------------------------------
 # Utility fascia oraria
-# ==============================================================================
+# ------------------------------------------------------------------------------
 def _in_fascia(fascia: str) -> bool:
     """
-    Controlla se l'ora corrente è nella fascia oraria configurata.
-    fascia: "HH:MM-HH:MM"
-      start < end → fascia diurna stesso giorno  (es. "08:00-18:00")
-      start > end → fascia notturna span mezzanotte (es. "22:00-05:00")
-    Ritorna True in caso di fascia assente/malformata (fail-safe = H24).
+    True se ora corrente è dentro la fascia "HH:MM-HH:MM".
+    Fail-safe: fascia assente/malformata -> True (H24).
     """
     if not fascia or not isinstance(fascia, str):
         return True
@@ -65,68 +29,52 @@ def _in_fascia(fascia: str) -> bool:
         start, end = parti[0].strip(), parti[1].strip()
         now = datetime.now().strftime("%H:%M")
         if start < end:
-            return start <= now < end        # fascia diurna
-        else:
-            return now >= start or now < end  # fascia notturna (span mezzanotte)
+            return start <= now < end
+        return now >= start or now < end
     except Exception:
-        return True  # fail-safe: fascia malformata → includi sempre
+        return True
 
-
-# ==============================================================================
-# Struttura default
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# Struttura default runtime.json
+# ------------------------------------------------------------------------------
 def _default() -> dict:
     return {
-        "_nota": (
-            "Modificabile a runtime — riletto ogni ciclo. "
-            "Le istanze vengono sempre lette da config.py. "
-            "Usa 'overrides.bs' o 'overrides.mumu' per modificare singole istanze "
-            "(es. {\"bs\": {\"FAU_09\": {\"abilitata\": false}}, "
-            "\"mumu\": {\"FAU_01\": {\"truppe\": 13000}}})."
-        ),
+        "_nota": "Modificabile a runtime — riletto ogni ciclo. Le istanze vengono sempre lette da config.py.",
         "globali": {
-            "ISTANZE_BLOCCO":                 getattr(config, "ISTANZE_BLOCCO", 1),
-            "WAIT_MINUTI":                    getattr(config, "WAIT_MINUTI", 1),
-            "ALLEANZA_ABILITATA":             getattr(config, "ALLEANZA_ABILITATA", True),
-            "MESSAGGI_ABILITATI":             getattr(config, "MESSAGGI_ABILITATI", True),
-            "DAILY_VIP_ABILITATO":            getattr(config, "DAILY_VIP_ABILITATO", True),
-            "DAILY_RADAR_ABILITATO":          getattr(config, "DAILY_RADAR_ABILITATO", True),
-            "RADAR_CENSUS_ABILITATO":         getattr(config, "RADAR_CENSUS_ABILITATO", False),
-            "RIFORNIMENTO_ABILITATO":         getattr(config, "RIFORNIMENTO_ABILITATO", True),
-            "RIFORNIMENTO_SOGLIA_CAMPO_M":    getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M",    5.0),
-            "RIFORNIMENTO_SOGLIA_LEGNO_M":    getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M",    5.0),
+            "ISTANZE_BLOCCO": getattr(config, "ISTANZE_BLOCCO", 1),
+            "WAIT_MINUTI": getattr(config, "WAIT_MINUTI", 1),
+            "ALLEANZA_ABILITATA": getattr(config, "ALLEANZA_ABILITATA", True),
+            "MESSAGGI_ABILITATI": getattr(config, "MESSAGGI_ABILITATI", True),
+            "DAILY_VIP_ABILITATO": getattr(config, "DAILY_VIP_ABILITATO", True),
+            "DAILY_RADAR_ABILITATO": getattr(config, "DAILY_RADAR_ABILITATO", True),
+            "RADAR_CENSUS_ABILITATO": getattr(config, "RADAR_CENSUS_ABILITATO", False),
+            "ZAINO_ABILITATO": getattr(config, "ZAINO_ABILITATO", False),
+            "ARENA_OF_GLORY_ABILITATO": getattr(config, "ARENA_OF_GLORY_ABILITATO", False),
+            "RIFORNIMENTO_ABILITATO": getattr(config, "RIFORNIMENTO_ABILITATO", True),
+            "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO": getattr(config, "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO", 5),
+            "RIFORNIMENTO_SOGLIA_CAMPO_M": getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M", 5.0),
+            "RIFORNIMENTO_SOGLIA_LEGNO_M": getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M", 5.0),
             "RIFORNIMENTO_SOGLIA_PETROLIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5),
-            "RIFORNIMENTO_SOGLIA_ACCIAIO_M":  getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M",  3.5),
+            "RIFORNIMENTO_SOGLIA_ACCIAIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M", 3.5),
             "ALLOCATION_RATIO": {
-                "campo":    0.3750,
+                "campo": 0.3750,
                 "segheria": 0.3750,
                 "petrolio": 0.1875,
-                "acciaio":  0.0625,
+                "acciaio": 0.0625,
             },
         },
-        "overrides": {
-            "bs":   {},
-            "mumu": {},
-        },
+        "overrides": {"bs": {}, "mumu": {}},
     }
 
-
-# ==============================================================================
+# ------------------------------------------------------------------------------
 # Inizializza / migra runtime.json
-# ==============================================================================
+# ------------------------------------------------------------------------------
 def inizializza_se_mancante():
-    """
-    - Se runtime.json non esiste: lo crea con la struttura nuova.
-    - Se esiste con struttura VECCHIA (istanze_bs/istanze_mumu): migra
-      automaticamente estraendo gli overrides significativi.
-    - Se esiste con struttura nuova: aggiunge solo chiavi globali mancanti.
-    """
     with _lock:
         if not os.path.exists(_PATH):
             _scrivi_raw(_default())
             print(f"[RUNTIME] runtime.json creato → {_PATH}")
             return
-
         try:
             with open(_PATH, "r", encoding="utf-8") as f:
                 esistente = json.load(f)
@@ -135,62 +83,24 @@ def inizializza_se_mancante():
             _scrivi_raw(_default())
             return
 
-        # --- Migrazione struttura vecchia (istanze_bs/istanze_mumu) ---
+        # Migrazione vecchia struttura (istanze_bs/istanze_mumu)
         if "istanze_bs" in esistente or "istanze_mumu" in esistente:
-            print("[RUNTIME] Struttura vecchia rilevata — migrazione a formato overrides namespace...")
-            nuovo = _default()
-
-            # Conserva i globali esistenti
-            for k, v in esistente.get("globali", {}).items():
-                if k in nuovo["globali"]:
-                    nuovo["globali"][k] = v
-
-            # Estrai overrides per namespace
-            for ns, chiave_lista in (("bs", "istanze_bs"), ("mumu", "istanze_mumu")):
-                for ist in esistente.get(chiave_lista, []):
-                    nome = ist.get("nome", "")
-                    if not nome:
-                        continue
-                    delta = {}
-                    if not ist.get("abilitata", True):
-                        delta["abilitata"] = False
-                    ist_cfg = _trova_in_config(nome)
-                    if ist_cfg:
-                        if ist.get("truppe") not in (None, ist_cfg.get("truppe", 12000)):
-                            delta["truppe"] = ist["truppe"]
-                        if ist.get("max_squadre") not in (None, ist_cfg.get("max_squadre", 4)):
-                            delta["max_squadre"] = ist["max_squadre"]
-                    if delta:
-                        nuovo["overrides"][ns][nome] = delta
-
-            _scrivi_raw(nuovo)
-            print(f"[RUNTIME] Migrazione completata.")
-            return
-
-        # --- Migrazione overrides flat → namespace bs/mumu ---
-        ovr = esistente.get("overrides", {})
-        if ovr and not ("bs" in ovr or "mumu" in ovr):
-            print("[RUNTIME] Overrides flat rilevati — migrazione a namespace bs/mumu...")
+            print("[RUNTIME] Struttura vecchia rilevata — migrazione...")
             nuovo = _default()
             for k, v in esistente.get("globali", {}).items():
                 if k in nuovo["globali"]:
                     nuovo["globali"][k] = v
-            # Applica gli override flat a entrambi i namespace (comportamento conservativo)
-            for nome, delta in ovr.items():
-                nuovo["overrides"]["bs"][nome]   = dict(delta)
-                nuovo["overrides"]["mumu"][nome] = dict(delta)
             _scrivi_raw(nuovo)
-            print("[RUNTIME] Migrazione overrides flat completata — verificare bs/mumu in runtime.json")
+            print("[RUNTIME] Migrazione completata.")
             return
 
-        # --- Struttura nuova: aggiungi chiavi globali mancanti e namespace overrides ---
+        # Struttura nuova: aggiungi chiavi globali mancanti
         default = _default()
         aggiornato = False
         for k, v in default["globali"].items():
             if k not in esistente.get("globali", {}):
                 esistente.setdefault("globali", {})[k] = v
                 aggiornato = True
-        # Assicura che overrides abbia entrambi i namespace
         ovr = esistente.setdefault("overrides", {})
         if "bs" not in ovr:
             ovr["bs"] = {}
@@ -202,19 +112,9 @@ def inizializza_se_mancante():
             _scrivi_raw(esistente)
             print("[RUNTIME] runtime.json aggiornato con nuove chiavi")
 
-
-def _trova_in_config(nome: str) -> dict:
-    """Cerca istanza per nome in config.ISTANZE e config.ISTANZE_MUMU."""
-    for lst in (getattr(config, "ISTANZE", []), getattr(config, "ISTANZE_MUMU", [])):
-        for ist in lst:
-            if ist.get("nome") == nome:
-                return ist
-    return None
-
-
-# ==============================================================================
+# ------------------------------------------------------------------------------
 # Carica runtime.json
-# ==============================================================================
+# ------------------------------------------------------------------------------
 def carica() -> dict:
     with _lock:
         try:
@@ -228,14 +128,11 @@ def carica() -> dict:
             print(f"[RUNTIME] WARN carica(): {e} — uso default")
             return _default()
 
-
-# ==============================================================================
-# Applica parametri globali a config.* in memoria
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# Applica globali su config.*
+# ------------------------------------------------------------------------------
 def applica(rt: dict):
-    """Sovrascrive config.* in memoria con i valori di runtime.json globali."""
     g = rt.get("globali", {})
-
     if "ISTANZE_BLOCCO" in g:
         config.ISTANZE_BLOCCO = int(g["ISTANZE_BLOCCO"])
     if "WAIT_MINUTI" in g:
@@ -250,8 +147,20 @@ def applica(rt: dict):
         config.DAILY_RADAR_ABILITATO = bool(g["DAILY_RADAR_ABILITATO"])
     if "RADAR_CENSUS_ABILITATO" in g:
         config.RADAR_CENSUS_ABILITATO = bool(g["RADAR_CENSUS_ABILITATO"])
+    if "ZAINO_ABILITATO" in g:
+        config.ZAINO_ABILITATO = bool(g["ZAINO_ABILITATO"])
+    if "ARENA_OF_GLORY_ABILITATO" in g:
+        config.ARENA_OF_GLORY_ABILITATO = bool(g["ARENA_OF_GLORY_ABILITATO"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
+    if "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO" in g:
+        try:
+            v = int(g["RIFORNIMENTO_MAX_SPEDIZIONI_CICLO"])
+        except Exception:
+            v = int(getattr(config, "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO", 5))
+        if v < 0: v = 0
+        if v > 50: v = 50
+        config.RIFORNIMENTO_MAX_SPEDIZIONI_CICLO = v
     if "RIFORNIMENTO_SOGLIA_CAMPO_M" in g:
         config.RIFORNIMENTO_SOGLIA_CAMPO_M = float(g["RIFORNIMENTO_SOGLIA_CAMPO_M"])
     if "RIFORNIMENTO_SOGLIA_LEGNO_M" in g:
@@ -260,93 +169,60 @@ def applica(rt: dict):
         config.RIFORNIMENTO_SOGLIA_PETROLIO_M = float(g["RIFORNIMENTO_SOGLIA_PETROLIO_M"])
     if "RIFORNIMENTO_SOGLIA_ACCIAIO_M" in g:
         config.RIFORNIMENTO_SOGLIA_ACCIAIO_M = float(g["RIFORNIMENTO_SOGLIA_ACCIAIO_M"])
-
     if "ALLOCATION_RATIO" in g:
         try:
             import allocation
-            ratio  = g["ALLOCATION_RATIO"]
+            ratio = g["ALLOCATION_RATIO"]
             totale = sum(ratio.values())
             if totale > 0:
                 allocation.RATIO_TARGET = {k: v / totale for k, v in ratio.items()}
         except Exception as e:
             print(f"[RUNTIME] WARN applica ALLOCATION_RATIO: {e}")
 
-
-# ==============================================================================
-# Lista istanze attive — SEMPRE fresca da config.py + overrides
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# Istanze attive da config + overrides
+# ------------------------------------------------------------------------------
 def istanze_attive(rt: dict, emulatore: str) -> list:
-    """
-    Legge le istanze FRESH da config.py (mai dal json),
-    applica gli overrides del namespace corretto e ritorna la lista filtrata.
-
-    Namespace overrides: "bs" per BlueStacks, "mumu" per MuMuPlayer.
-    Priorità abilitata: runtime.json override > config.py campo abilitata.
-    """
     if "BlueStacks" in emulatore:
         lista_config = getattr(config, "ISTANZE", [])
         ns = "bs"
     else:
         lista_config = getattr(config, "ISTANZE_MUMU", [])
         ns = "mumu"
-
-    # Supporta sia struttura nuova {"bs": {...}, "mumu": {...}}
-    # che struttura flat legacy {"FAU_00": {...}} — retrocompatibilità
     ovr_root = rt.get("overrides", {})
-    if ns in ovr_root:
-        overrides = ovr_root[ns]
-    elif "bs" not in ovr_root and "mumu" not in ovr_root:
-        overrides = ovr_root  # struttura flat legacy
-    else:
-        overrides = {}
-
+    overrides = ovr_root.get(ns, ovr_root if ("bs" not in ovr_root and "mumu" not in ovr_root) else {})
     risultato = []
-
     for ist in lista_config:
         nome = ist.get("nome", "")
-        ovr  = overrides.get(nome, {})
-
-        # abilitata: override runtime ha precedenza su config.py
+        ovr = overrides.get(nome, {})
         abilitata = ovr.get("abilitata", ist.get("abilitata", True))
         if not abilitata:
             continue
-
-        # Costruisci dizionario risultante applicando overrides numerici
         ist_out = dict(ist)
-        if "truppe"        in ovr: ist_out["truppe"]        = int(ovr["truppe"])
-        if "max_squadre"   in ovr: ist_out["max_squadre"]   = int(ovr["max_squadre"])
-        if "layout"        in ovr: ist_out["layout"]        = int(ovr["layout"])
-        if "lingua"        in ovr: ist_out["lingua"]        = str(ovr["lingua"])
-        if "livello"       in ovr: ist_out["livello"]       = int(ovr["livello"])
-        if "fascia_oraria" in ovr: ist_out["fascia_oraria"] = str(ovr["fascia_oraria"])
-        if "profilo" in ovr: ist_out["profilo"] = str(ovr["profilo"])
-
-        # profilo esecuzione (default: full)
-        if "profilo" not in ist_out: ist_out["profilo"] = str(ist.get("profilo", "full"))
-
-# fascia_oraria: se configurata, escludi istanza fuori fascia
+        for k in ("truppe", "max_squadre", "layout", "livello"):
+            if k in ovr:
+                ist_out[k] = int(ovr[k])
+        for k in ("lingua", "fascia_oraria", "profilo"):
+            if k in ovr:
+                ist_out[k] = str(ovr[k])
+        if "profilo" not in ist_out:
+            ist_out["profilo"] = str(ist.get("profilo", "full"))
         fascia = ist_out.get("fascia_oraria", "")
         if fascia and not _in_fascia(fascia):
             continue
-
-        # Normalizza porta per tipo emulatore
         if "BlueStacks" in emulatore:
-            ist_out["porta"] = str(ist_out["porta"])
+            ist_out["porta"] = str(ist_out.get("porta", ""))
         else:
-            ist_out["porta"] = int(ist_out["porta"])
-
+            ist_out["porta"] = int(ist_out.get("porta", 16384))
         risultato.append(ist_out)
-
     return risultato
 
-
-# ==============================================================================
-# Salva / utility
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# Salva runtime.json
+# ------------------------------------------------------------------------------
 def salva(dati: dict) -> bool:
     with _lock:
         return _scrivi_raw(dati)
-
 
 def _scrivi_raw(dati: dict) -> bool:
     tmp = _PATH + ".tmp"
@@ -359,29 +235,10 @@ def _scrivi_raw(dati: dict) -> bool:
         print(f"[RUNTIME] ERRORE scrittura: {e}")
         return False
 
-
-def leggi_globali() -> dict:
-    return carica().get("globali", {})
-
-
-# ==============================================================================
-# Ripristina runtime.json dai valori correnti di config.py
-# Conserva gli overrides per-istanza (non li azzera).
-# ==============================================================================
 def ripristina_da_config() -> bool:
-    """
-    Sovrascrive la sezione 'globali' di runtime.json con i valori
-    attuali di config.py, mantenendo invariati gli overrides per-istanza.
-    """
     esistente = carica()
     nuovo = _default()
-    # Conserva overrides esistenti (con namespace se presenti)
-    ovr_esistente = esistente.get("overrides", {})
-    if "bs" in ovr_esistente or "mumu" in ovr_esistente:
-        nuovo["overrides"] = ovr_esistente
-    else:
-        # Struttura flat legacy — conserva com'è
-        nuovo["overrides"] = ovr_esistente
+    nuovo["overrides"] = esistente.get("overrides", {})
     ok = _scrivi_raw(nuovo)
     if ok:
         print("[RUNTIME] runtime.json ripristinato da config.py")

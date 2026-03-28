@@ -142,16 +142,18 @@ ISTANZE = [
 
 # --- MuMuPlayer ---
 ISTANZE_MUMU = [
-    #{"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "abilitata": True},
-    #{"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    {"nome": "FAU_02", "indice": "0", "porta": 16384, "truppe": 40000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "raccolta_only", "abilitata": True},
-    #{"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    #{"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    #{"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    #{"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    #{"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    #{"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "abilitata": True},
-    #{"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 12000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "abilitata": True},
+    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
+    {"nome": "FauMorfeus", "indice": "10", "porta": 16384, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": False},
+
 ]
 
 # ==============================================================================
@@ -231,6 +233,24 @@ RADAR_TIMEOUT_S    = 30    # timeout loop raccolta pallini (secondi)
 RADAR_TAP_DELAY_S  = 1.2   # attesa dopo ogni tap pallino (secondi)
 RADAR_SCAN_DELAY_S = 1.0   # attesa tra scan successivi (secondi)
 
+# --- Arena of Glory (960x540) ---
+ARENA_TAP_CAMPAIGN        = (584, 486)   # Home -> bottom bar "Campaign"
+ARENA_TAP_ARENA_OF_DOOM   = (321, 297)   # Campaign -> card "Arena of Doom"
+ARENA_TAP_ULTIMA_SFIDA    = (745, 482)   # Arena of Glory -> pulsante "Challenge" ultima riga
+ARENA_TAP_START_CHALLENGE = (730, 451)   # Schermata sfida -> "START CHALLENGE"
+ARENA_TAP_RISULTATO       = (480, 468)   # Schermata risultato -> "Tap to Continue"
+ARENA_TAP_CONGRATULATIONS = (480, 435)   # Popup stagionale "Congratulations" -> "Continue"
+ARENA_TAP_ESAURITE_CANCEL = (394, 331)   # Popup "Purchase more attempts?" -> "Cancel"
+ARENA_MAX_SFIDE           = 5            # sfide giornaliere massime
+ARENA_SCREEN_TMP          = "screen_arena.png"  # relativo a BOT_DIR
+# Pixel check popup "Congratulations" — pulsante giallo "Continue"
+ARENA_CONGRATS_CHECK_XY   = (480, 435)
+ARENA_CONGRATS_BGR_LOW    = (10,  130, 170)   # (B, G, R) minimo
+ARENA_CONGRATS_BGR_HIGH   = (100, 210, 255)   # (B, G, R) massimo
+# Pixel check popup "Purchase more attempts?" — pulsante "Cancel" grigio chiaro
+ARENA_ESAURITE_CHECK_XY   = (390, 330)
+ARENA_ESAURITE_SOGLIA     = 180   # tutti i canali BGR > soglia = popup presente
+
 # --- Coordinate Messaggi ---
 MSG_ICONA_X        = 928
 MSG_ICONA_Y        = 430
@@ -306,6 +326,9 @@ SCHEDULE_ORE_VIP       = 24   # ore minime tra esecuzioni ricompense VIP
 SCHEDULE_ORE_RADAR     = 12   # ore minime tra esecuzioni Radar Show
 SCHEDULE_ORE_ZAINO     = 168  # ore minime tra esecuzioni zaino (7 giorni = lunedì)
 
+# --- Arena of Glory ---
+SCHEDULE_ORE_ARENA     = 24   # ore minime tra esecuzioni arena (1 volta al giorno)
+
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
 ALLEANZA_ABILITATA     = False   # False = salta raccolta doni alleanza
 MESSAGGI_ABILITATI     = False   # False = salta raccolta messaggi sistema/alleanza
@@ -313,9 +336,11 @@ DAILY_VIP_ABILITATO    = False   # False = salta ricompense VIP giornaliere
 DAILY_RADAR_ABILITATO  = False   # False = salta Radar Show
 RADAR_CENSUS_ABILITATO = False  # True = salva crop icone radar per training classifier (attivare da runtime.json)
 ZAINO_ABILITATO        = False   # False = salta scarico zaino settimanale
+ARENA_OF_GLORY_ABILITATO = True  # False = salta Arena of Glory giornaliera
 ZAINO_MOLTIPLICATORE   = 2.0    # target = soglia × moltiplicatore (es. 2x = carica fino a 2× soglia)
 
 # --- Rifornimento alleanza ---
+RIFORNIMENTO_MAX_SPEDIZIONI_CICLO = 5  # max spedizioni rifornimento per istanza in un singolo ciclo
 RIFORNIMENTO_ABILITATO         = False
 DOOMS_ACCOUNT                  = "FauMorfeus"
 DOOMS_AVATAR                   = "templates/avatar.png"

@@ -2,7 +2,7 @@
 chcp 65001 >nul
 title Doomsday Bot Farm — Avvio Pulito
 
-set BOT_DIR=E:\Bot-farm
+set BOT_DIR=C:\Bot-farm
 
 echo ===============================================================
 echo   DOOMSDAY BOT FARM — Avvio Pulito

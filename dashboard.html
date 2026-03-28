@@ -353,16 +353,16 @@
         <div class="rt-row"><label>VIP Daily Rewards</label><input type="checkbox" id="rt_vip_on"></div>
         <div class="rt-row"><label>Radar Show</label><input type="checkbox" id="rt_radar_on"></div>
         <div class="rt-row"><label>Supply Resources</label><input type="checkbox" id="rt_rif_on"></div>
- <div class="rt-row"><label>Weekly Backpack</label><input type="checkbox" id="rt_zaino_on"></div>
-
- <div class="rt-adv-header" onclick="rtToggleAvanzate()">
-   <span class="rt-adv-arrow" id="rt_adv_arrow">▶</span>
-   <span class="rt-adv-title">Avanzate</span>
- </div>
- <div id="rt_adv_body" class="rt-adv-body" style="display:none">
-   <div class="rt-row"><label>Radar Census (training)</label><input type="checkbox" id="rt_radar_census_on"></div>
-   <div class="rt-adv-hint">Genera crop icone Radar per training/diagnostica. Usare solo se necessario.</div>
- </div>
+		<div class="rt-row"><label>Weekly Backpack</label><input type="checkbox" id="rt_zaino_on"></div>
+		<div class="rt-row"><label>Arena of Glory</label><input type="checkbox" id="rt_arena_on"></div>
+		 <div class="rt-adv-header" onclick="rtToggleAvanzate()">
+		   <span class="rt-adv-arrow" id="rt_adv_arrow">▶</span>
+		   <span class="rt-adv-title">Avanzate</span>
+		 </div>
+		 <div id="rt_adv_body" class="rt-adv-body" style="display:none">
+		   <div class="rt-row"><label>Radar Census (training)</label><input type="checkbox" id="rt_radar_census_on"></div>
+		   <div class="rt-adv-hint">Genera crop icone Radar per training/diagnostica. Usare solo se necessario.</div>
+		</div>
       </div>
 
       <!-- Colonna destra: soglie invio -->
@@ -372,6 +372,9 @@
         <div class="rt-row"><label>🪵 Legno (M)</label><input type="number" id="rt_soglia_legno" min="0.1" max="50" step="0.5"></div>
         <div class="rt-row"><label>🛢 Petrolio (M)</label><input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5"></div>
         <div class="rt-row"><label>⚙ Acciaio (M)</label><input type="number" id="rt_soglia_acc" min="0.1" max="25" step="0.5"></div>
+ <div class="rt-row"><label>📦 Max spedizioni/ciclo</label><input type="number" id="rt_rif_max_sped" min="0" max="50" step="1"></div>
+ <div style="font-size:10px;color:var(--text-dim);margin-top:-2px;margin-bottom:6px">0 = nessun limite (debug). Default 5.</div>
+
         <div style="margin-top:10px;margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Allocation ratio</div>
         <div class="rt-row"><label>🍅 Campo %</label><input type="number" id="rt_r_campo" min="0" max="100" step="1"></div>
         <div class="rt-row"><label>🪵 Segheria %</label><input type="number" id="rt_r_seg" min="0" max="100" step="1"></div>
@@ -974,12 +977,15 @@ function rtPopolaGlobali(rt) {
   _setChk("rt_vip_on",          g.DAILY_VIP_ABILITATO ?? true);
   _setChk("rt_radar_on",        g.DAILY_RADAR_ABILITATO ?? true);
   _setChk("rt_zaino_on", g.ZAINO_ABILITATO ?? false);
- _setChk("rt_radar_census_on", g.RADAR_CENSUS_ABILITATO ?? false);
- _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
+  _setChk("rt_radar_census_on", g.RADAR_CENSUS_ABILITATO ?? false);
+  _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
+  _setChk("rt_arena_on",        g.ARENA_OF_GLORY_ABILITATO ?? true);
   _setVal("rt_soglia_campo",    g.RIFORNIMENTO_SOGLIA_CAMPO_M    ?? 5.0);
   _setVal("rt_soglia_legno",    g.RIFORNIMENTO_SOGLIA_LEGNO_M    ?? 5.0);
   _setVal("rt_soglia_pet",      g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
   _setVal("rt_soglia_acc",      g.RIFORNIMENTO_SOGLIA_ACCIAIO_M  ?? 3.5);
+  _setVal("rt_rif_max_sped", g.RIFORNIMENTO_MAX_SPEDIZIONI_CICLO ?? 5);
+  
   const ratio = g.ALLOCATION_RATIO || {};
   _setVal("rt_r_campo", Math.round((ratio.campo    ?? 0.375)  * 100));
   _setVal("rt_r_seg",   Math.round((ratio.segheria ?? 0.375)  * 100));
@@ -1110,15 +1116,17 @@ async function rtSalvaGlobali() {
 
   _rtData.globali = {
     ..._rtData.globali,
-    ISTANZE_BLOCCO:                 +_val("rt_blocco"),
-    WAIT_MINUTI:                    +_val("rt_wait"),
-    ALLEANZA_ABILITATA:             document.getElementById("rt_alleanza_on").checked,
-    MESSAGGI_ABILITATI:             document.getElementById("rt_messaggi_on").checked,
-    DAILY_VIP_ABILITATO:            document.getElementById("rt_vip_on").checked,
-    DAILY_RADAR_ABILITATO:          document.getElementById("rt_radar_on").checked,
-    ZAINO_ABILITATO: document.getElementById("rt_zaino_on").checked,
- RADAR_CENSUS_ABILITATO: document.getElementById("rt_radar_census_on").checked,
- RIFORNIMENTO_ABILITATO:         document.getElementById("rt_rif_on").checked,
+    ISTANZE_BLOCCO:                 		+_val("rt_blocco"),
+    WAIT_MINUTI:                    		+_val("rt_wait"),
+	RIFORNIMENTO_MAX_SPEDIZIONI_CICLO:		+_val("rt_rif_max_sped"),
+    ALLEANZA_ABILITATA:             		document.getElementById("rt_alleanza_on").checked,
+    MESSAGGI_ABILITATI:             		document.getElementById("rt_messaggi_on").checked,
+    DAILY_VIP_ABILITATO:            		document.getElementById("rt_vip_on").checked,
+    DAILY_RADAR_ABILITATO:          		document.getElementById("rt_radar_on").checked,
+    ZAINO_ABILITATO: 						document.getElementById("rt_zaino_on").checked,
+	RADAR_CENSUS_ABILITATO: 				document.getElementById("rt_radar_census_on").checked,
+	RIFORNIMENTO_ABILITATO:         		document.getElementById("rt_rif_on").checked,
+	ARENA_OF_GLORY_ABILITATO:				document.getElementById("rt_arena_on").checked,
     RIFORNIMENTO_SOGLIA_CAMPO_M:          +_val("rt_soglia_campo"),
     RIFORNIMENTO_SOGLIA_LEGNO_M:          +_val("rt_soglia_legno"),
     RIFORNIMENTO_SOGLIA_PETROLIO_M:       +_val("rt_soglia_pet"),

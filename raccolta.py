@@ -725,7 +725,13 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
                     log(f"Zaino: scaricato totale {totale_zaino:.2f}M")
         else:
             log("Zaino disabilitato (ZAINO_ABILITATO=False) - skip")
-        
+
+        # --- ARENA OF GLORY — sfide giornaliere ---
+        if getattr(config, "ARENA_OF_GLORY_ABILITATO", False):
+            _run_guarded("Arena", lambda: _daily.esegui_arena_guarded(porta, nome, logger))
+        else:
+            log("Arena disabilitata (ARENA_OF_GLORY_ABILITATO=False) - skip")
+
         # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
         def _do_rifornimento():
             try:

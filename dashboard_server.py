@@ -1,7 +1,6 @@
-# ==============================================================================
-# DOOMSDAY BOT V5 - dashboard_server.py (profilo + robustezza)
-# ==============================================================================
-
+# ============================================================================== 
+# DOOMSDAY BOT V5 - dashboard_server.py (profilo + robustezza) 
+# ============================================================================== 
 import http.server
 import threading
 import os
@@ -10,6 +9,47 @@ import time
 
 PORT = 8080
 LOG_TAIL_LINES = 300
+
+# --- Validazione/merge runtime.json (robustezza) ---
+def _clamp_int(v, default=0, vmin=None, vmax=None):
+    try:
+        iv = int(v)
+    except Exception:
+        iv = int(default)
+    if vmin is not None and iv < vmin:
+        iv = vmin
+    if vmax is not None and iv > vmax:
+        iv = vmax
+    return iv
+
+
+def _merge_runtime(existing, incoming):
+    """Merge conservativo: preserva chiavi non presenti nell'incoming."""
+    out = dict(existing or {})
+    out.setdefault('globali', {})
+    out.setdefault('overrides', {})
+    out['overrides'].setdefault('bs', {})
+    out['overrides'].setdefault('mumu', {})
+
+    inc_g = (incoming or {}).get('globali', {}) or {}
+    inc_o = (incoming or {}).get('overrides', {}) or {}
+
+    out['globali'].update(inc_g)
+
+    if isinstance(inc_o, dict) and ('bs' in inc_o or 'mumu' in inc_o):
+        if isinstance(inc_o.get('bs'), dict):
+            out['overrides']['bs'].update(inc_o.get('bs'))
+        if isinstance(inc_o.get('mumu'), dict):
+            out['overrides']['mumu'].update(inc_o.get('mumu'))
+    elif isinstance(inc_o, dict):
+        out['overrides']['bs'].update(inc_o)
+        out['overrides']['mumu'].update(inc_o)
+
+    g = out.get('globali', {})
+    if 'RIFORNIMENTO_MAX_SPEDIZIONI_CICLO' in g:
+        g['RIFORNIMENTO_MAX_SPEDIZIONI_CICLO'] = _clamp_int(g['RIFORNIMENTO_MAX_SPEDIZIONI_CICLO'], default=5, vmin=0, vmax=50)
+
+    return out
 
 
 def _importa_modulo(nome, cartella):
@@ -141,19 +181,34 @@ def _run():
                 return self._json_err(str(e))
 
         def do_POST(self):
-            if self.path != "/runtime.json":
+            if not self.path.startswith("/runtime.json"):
                 self.send_response(404)
                 self.end_headers()
                 return
+
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
                 dati = json.loads(body.decode("utf-8"))
+
                 path_json = os.path.join(cartella, "runtime.json")
+
+                try:
+                    if os.path.exists(path_json):
+                        with open(path_json, "r", encoding="utf-8") as fr:
+                            esistente = json.load(fr)
+                    else:
+                        esistente = {}
+                except Exception:
+                    esistente = {}
+
+                dati = _merge_runtime(esistente, dati)
+
                 path_tmp = path_json + ".tmp"
                 with open(path_tmp, "w", encoding="utf-8") as f:
                     json.dump(dati, f, ensure_ascii=False, indent=2)
                 os.replace(path_tmp, path_json)
+
                 return self._json_ok({"ok": True})
             except Exception as e:
                 return self._json_err(str(e))

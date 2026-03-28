@@ -80,7 +80,8 @@ CLAIM_FREE_BADGE_ZONA = (650, 270, 730, 320)
 # Coordinata tap per attivare "Claim Free Daily" — centro della card viola.
 # Separata dalla zona badge: il pallino rosso è in alto a dx della card,
 # il pulsante attivo è il centro/corpo della card a ~(575, 380).
-TAP_VIP_CLAIM_FREE = (575, 380)
+# TAP_VIP_CLAIM_FREE = (526, 380)
+TAP_VIP_CLAIM_FREE = (526, 444)
 
 # --- Parametri rilevamento pallino rosso (condivisi con radar_show.py) ---
 BADGE_R_MIN  = getattr(config, "RADAR_BADGE_R_MIN",  150)
@@ -347,3 +348,34 @@ def esegui_radar_guarded(porta: str, nome: str, logger=None, coords=None) -> boo
     if ok:
         scheduler.registra_esecuzione(nome, porta, "radar")
     return ok
+
+
+def esegui_arena_guarded(porta: str, nome: str, logger=None) -> bool:
+    """
+    Esegue solo il task Arena of Glory se schedulato e abilitato.
+    Chiamare da raccolta.py wrappato in _run_guarded("Arena", ...).
+    Schedulazione: 24h (SCHEDULE_ORE_ARENA), chiave "arena" in istanza_stato.
+    """
+    def log(msg):
+        if logger: logger(nome, msg)
+
+    if not getattr(config, "ARENA_OF_GLORY_ABILITATO", False):
+        log("[DAILY] Arena disabilitata — skip")
+        return True
+
+    if not scheduler.deve_eseguire(nome, porta, "arena", logger):
+        return True  # già eseguita oggi, non è un errore
+
+    import arena_of_glory as _arena
+    adb_exe = getattr(config, "MUMU_ADB", "") or getattr(config, "ADB_EXE", "")
+    res = _arena.run_arena_of_glory(adb_exe=adb_exe, porta=porta)
+
+    eseguita = res.get("sfide_eseguite", 0) > 0 or res.get("esaurite", False)
+    if eseguita:
+        scheduler.registra_esecuzione(nome, porta, "arena")
+        log(f"[DAILY] Arena: {res['sfide_eseguite']} sfide"
+            + (" (esaurite)" if res["esaurite"] else ""))
+    else:
+        log("[DAILY] Arena: nessuna sfida eseguita — ts non aggiornato")
+
+    return res.get("errore") is None

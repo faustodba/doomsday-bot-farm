@@ -1086,6 +1086,19 @@ def esegui_rifornimento(porta: str, nome: str,
     log(f"Risorse configurate: {list(risorse_config.keys())} | "
         f"soglie: { {r: f'{soglie[r]}M' for r in risorse_config} }")
 
+    # Limite massimo spedizioni per ciclo (configurabile via runtime/dashboard)
+
+    max_sped = int(getattr(config, 'RIFORNIMENTO_MAX_SPEDIZIONI_CICLO', 5) or 0)
+
+    if max_sped > 0:
+
+        log(f"Limite spedizioni ciclo: {max_sped}")
+
+    else:
+
+        max_sped = None
+
+
     spedizioni    = 0
     risorse_lista = list(risorse_config.keys())
     idx_risorsa   = 0
@@ -1095,6 +1108,11 @@ def esegui_rifornimento(porta: str, nome: str,
     MARGINE_ATTESA = 8  # secondi extra dopo stima rientro slot
 
     while True:
+        # Stop se raggiunto il limite spedizioni per ciclo
+        if max_sped is not None and spedizioni >= max_sped:
+            log(f"Limite massimo spedizioni per ciclo raggiunto ({spedizioni}/{max_sped}) - stop rifornimento")
+            break
+
         # 1. Rileggi slot liberi dalla home
         slot = _slot_liberi(porta)
         log(f"Slot liberi: {slot}")
