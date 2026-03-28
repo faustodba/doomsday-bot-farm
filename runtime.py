@@ -51,6 +51,7 @@ def _default() -> dict:
             "ZAINO_ABILITATO": getattr(config, "ZAINO_ABILITATO", False),
             "ARENA_OF_GLORY_ABILITATO": getattr(config, "ARENA_OF_GLORY_ABILITATO", False),
             "RIFORNIMENTO_ABILITATO": getattr(config, "RIFORNIMENTO_ABILITATO", True),
+            "RIFORNIMENTO_MAPPA_ABILITATO": getattr(config, "RIFORNIMENTO_MAPPA_ABILITATO", False),
             "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO": getattr(config, "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO", 5),
             "RIFORNIMENTO_SOGLIA_CAMPO_M": getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M", 5.0),
             "RIFORNIMENTO_SOGLIA_LEGNO_M": getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M", 5.0),
@@ -153,6 +154,8 @@ def applica(rt: dict):
         config.ARENA_OF_GLORY_ABILITATO = bool(g["ARENA_OF_GLORY_ABILITATO"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
+    if "RIFORNIMENTO_MAPPA_ABILITATO" in g:
+        config.RIFORNIMENTO_MAPPA_ABILITATO = bool(g["RIFORNIMENTO_MAPPA_ABILITATO"])
     if "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO" in g:
         try:
             v = int(g["RIFORNIMENTO_MAX_SPEDIZIONI_CICLO"])

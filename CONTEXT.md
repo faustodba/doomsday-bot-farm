@@ -221,3 +221,60 @@ Tutti i task schedulati seguono lo stesso schema:
 - Richiedere sempre il file attuale dal PC prima di modifiche — mai lavorare da memoria
 - Git commit file per file con `git add` esplicito
 - CONTEXT.md e README.md aggiornati prima di ogni tag
+
+---
+
+## 2026-03-28 — V5.23 WIP
+
+### arena_of_glory.py (nuovo modulo)
+- Task giornaliero Arena of Glory (Arena of Doom): esegue MAX_SFIDE=5 sfide
+- Navigazione: HOME → Campaign → Arena of Doom → tap ultima sfida → START CHALLENGE
+- Popup stagionale "Congratulations/Glory Silver": pixel check pulsante giallo Continue
+- Popup sfide esaurite "Purchase more attempts?": pixel check pulsante Cancel grigio
+- Nessun OCR — contatore fisso MAX_SFIDE, uscita anticipata su popup esaurite
+- Tutte le coordinate in `config.py` sezione `# --- Arena of Glory ---`
+- Integrato come daily task 24h in `daily_tasks.esegui_arena_guarded()`
+- Chiave schedulazione: `"arena"` in `istanza_stato_{nome}_{porta}.json`
+- Flag: `ARENA_OF_GLORY_ABILITATO` in config/runtime/dashboard
+
+### rifornimento_mappa.py (nuovo modulo)
+- Flusso alternativo invio risorse via coordinate mappa (bypass lista Membri)
+- Navigazione: HOME → Mappa → lente coordinate → digita X,Y → conferma → tap castello → RESOURCE SUPPLY
+- Loop ottimizzato: resta in mappa tra spedizioni consecutive (no cicli home↔mappa)
+- Template matching: `templates/btn_resource_supply_map.png` per pulsante RESOURCE SUPPLY
+- Coordinate rifugio hardcoded: `RIFUGIO_X=684, RIFUGIO_Y=532` (TODO: esternalizzare)
+- Stessa logica di `rifornimento.py`: controllo quota, soglie, coda volo, snapshot pre/post
+- Dispatcher in `raccolta.py`: `RIFORNIMENTO_MAPPA_ABILITATO` sceglie il flusso
+- ADB_EXE default MuMu in `config.py` (`ADB_EXE = MUMU_ADB or BS_ADB`)
+
+### rifornimento.py
+- Fix: `KEYCODE_BACK` prima di `return` su quota esaurita (3 punti)
+  - `_compila_e_invia`: provviste=0 iniziale e dopo compilazione
+  - `esegui_rifornimento`: quota_esaurita nel loop principale
+
+### config.py
+- `ADB_EXE = MUMU_ADB or BS_ADB` (default MuMu)
+- Sezione `# --- Arena of Glory (960x540) ---` con 16 costanti coordinate/pixel
+- `ARENA_OF_GLORY_ABILITATO = False`, `SCHEDULE_ORE_ARENA = 24`
+- `RIFORNIMENTO_MAPPA_ABILITATO = False`
+
+### runtime.py
+- `ARENA_OF_GLORY_ABILITATO` in `_default()` e `applica()`
+- `RIFORNIMENTO_MAPPA_ABILITATO` in `_default()` e `applica()`
+
+### raccolta.py
+- Task Arena dopo Zaino: `_daily.esegui_arena_guarded(porta, nome, logger)`
+- Dispatcher rifornimento: se `RIFORNIMENTO_MAPPA_ABILITATO` usa `rifornimento_mappa`, altrimenti vecchio flusso
+
+### daily_tasks.py
+- `esegui_arena_guarded()`: scheduling 24h chiave "arena", pattern identico a VIP/Radar
+
+### dashboard.html
+- Toggle "Arena of Glory" (`rt_arena_on`)
+- Toggle "Supply via Map" (`rt_rif_mappa_on`) con default false
+
+### ⚠️ PENDING — invariati da V5.21
+1. **`allocation.py`** — mapping campo→pomodoro non ancora implementato
+2. **`emulatore_base.py`** — full traceback nel log errore
+3. **Radar Census** — dataset FAU_06..FAU_09 + Random Forest classifier
+4. **`rifornimento_mappa.py`** — coordinate rifugio da esternalizzare in JSON per istanza

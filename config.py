@@ -65,8 +65,8 @@ MUMU_MANAGER = _trova_exe(
 )
 
 # --- Comune ---
-# ADB_EXE: default BS, main.py lo sovrascrive a runtime in base all'emulatore scelto
-ADB_EXE = BS_ADB
+# ADB_EXE: default MuMu, main.py lo sovrascrive a runtime in base all'emulatore scelto
+ADB_EXE = MUMU_ADB or BS_ADB
 
 TESSERACT_EXE = _trova_exe(
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -142,17 +142,17 @@ ISTANZE = [
 
 # --- MuMuPlayer ---
 ISTANZE_MUMU = [
-    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "full", "abilitata": False},
+    {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "full", "abilitata": True},
     {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": False},
-    {"nome": "FauMorfeus", "indice": "10", "porta": 16384, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": False},
+    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FauMorfeus", "indice": "10", "porta": 16384, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": True},
 
 ]
 
@@ -342,6 +342,7 @@ ZAINO_MOLTIPLICATORE   = 2.0    # target = soglia × moltiplicatore (es. 2x = ca
 # --- Rifornimento alleanza ---
 RIFORNIMENTO_MAX_SPEDIZIONI_CICLO = 5  # max spedizioni rifornimento per istanza in un singolo ciclo
 RIFORNIMENTO_ABILITATO         = False
+RIFORNIMENTO_MAPPA_ABILITATO   = False  # True = usa navigazione via coordinate mappa invece di lista Membri
 DOOMS_ACCOUNT                  = "FauMorfeus"
 DOOMS_AVATAR                   = "templates/avatar.png"
 RIFORNIMENTO_BTN_TEMPLATE      = "templates/btn_risorse_approv.png"       # IT

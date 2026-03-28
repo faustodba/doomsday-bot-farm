@@ -14,7 +14,45 @@ pip install pillow opencv-python pytesseract numpy
 Nessuna dipendenza aggiuntiva — `scipy` non è richiesto.
 
 ---
-## 🚧 Versione v5.21 (WIP — sviluppo sospeso, da riprendere)
+## 🚧 Versione v5.23 (WIP — sviluppo in corso)
+
+### Arena of Glory (`arena_of_glory.py` — nuovo)
+- Task giornaliero: esegue 5 sfide nell'Arena of Glory
+- Popup stagionale "Congratulations": pixel check pulsante giallo Continue
+- Popup sfide esaurite: pixel check pulsante Cancel grigio → uscita anticipata
+- Flag: `ARENA_OF_GLORY_ABILITATO` | Schedulazione: 24h chiave `"arena"`
+
+### Rifornimento via mappa (`rifornimento_mappa.py` — nuovo)
+- Navigazione diretta al rifugio tramite coordinate mappa — bypass lista Membri
+- Loop ottimizzato: resta in mappa tra spedizioni (elimina cicli home↔mappa)
+- Template matching pulsante RESOURCE SUPPLY: `btn_resource_supply_map.png`
+- Attivabile da dashboard: toggle "Supply via Map"
+- Stessa logica di `rifornimento.py`: quota, soglie, coda volo, snapshot
+
+### Fix rifornimento (`rifornimento.py`)
+- `KEYCODE_BACK` aggiunto prima di ogni `return` su quota esaurita (3 punti)
+
+### Fix configurazione
+- `ADB_EXE` default MuMu in `config.py`
+- `RIFORNIMENTO_MAPPA_ABILITATO` in config/runtime/dashboard
+
+### ⚠️ Pending
+1. `allocation.py` — mapping campo→pomodoro
+2. `emulatore_base.py` — full traceback log
+3. Radar Census — dataset FAU_06..FAU_09 + Random Forest
+4. `rifornimento_mappa.py` — coordinate rifugio da esternalizzare per istanza
+
+---
+## 🚧 Versione v5.22 (WIP — sviluppo sospeso)
+
+### Modifiche completate
+- Sostituzione globale `assicura_home()` → `vai_in_home()` in tutti i moduli
+- VIP CLAIM_FREE: coordinate calibrate
+- `rifornimento.py`: `sleep(2.5)` dopo Tap Membri
+- Task VIP e Radar separati in `_run_guarded()` individuali
+- `runtime.py`: aggiunto `RADAR_CENSUS_ABILITATO`
+
+---
 
 ### Modifiche completate
 - Sostituzione globale `assicura_home()` → `vai_in_home()` in tutti i moduli
@@ -126,13 +164,15 @@ Stato persistito in `istanza_stato_{nome}_{porta}.json` per istanza.
 | `raccolta.py` | Logica raccolta risorse, blacklist nodi, allocation |
 | `allocation.py` | Algoritmo gap per sequenza ottimale nodi |
 | `zaino.py` | Scarico settimanale backpack |
-| `daily_tasks.py` | Task periodici: VIP, Radar Show, Zaino |
+| `daily_tasks.py` | Task periodici: VIP, Radar Show, Zaino, Arena |
+| `arena_of_glory.py` | Arena of Glory — sfide giornaliere |
 | `radar_show.py` | Radar Station — riconoscimento pallini con numpy |
 | `radar_census.py` | Census icone mappa — dataset + classificazione |
 | `status.py` | Scrittura status.json per dashboard |
 | `scheduler.py` | Schedulazione task per istanza |
 | `alleanza.py` | Raccolta doni alleanza |
-| `rifornimento.py` | Invio risorse all'alleanza |
+| `rifornimento.py` | Invio risorse all'alleanza (via lista Membri) |
+| `rifornimento_mappa.py` | Invio risorse all'alleanza (via coordinate mappa) |
 
 ### Note repository
 - File JSON runtime/stato **non versionati**

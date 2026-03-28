@@ -735,13 +735,21 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
         # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
         def _do_rifornimento():
             try:
-                return rifornimento.esegui_rifornimento(
-                    porta, nome,
-                    logger=logger,
-                    ciclo=ciclo,
-                    coord_alleanza=coords.alleanza,
-                    btn_template=coords.btn_rifornimento_template,
-                )
+                if getattr(config, "RIFORNIMENTO_MAPPA_ABILITATO", False):
+                    import rifornimento_mappa as _rifmap
+                    return _rifmap.esegui_rifornimento_mappa(
+                        porta, nome,
+                        logger=logger,
+                        ciclo=ciclo,
+                    )
+                else:
+                    return rifornimento.esegui_rifornimento(
+                        porta, nome,
+                        logger=logger,
+                        ciclo=ciclo,
+                        coord_alleanza=coords.alleanza,
+                        btn_template=coords.btn_rifornimento_template,
+                    )
             except Exception as _e:
                 log(f"Rifornimento: errore non bloccante: {_e}")
                 return None

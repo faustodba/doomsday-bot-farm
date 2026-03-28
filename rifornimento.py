@@ -969,6 +969,8 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
 
     if provviste == 0:
         log("Provviste giornaliere esaurite - stop ciclo")
+        adb.keyevent(porta, "KEYCODE_BACK")
+        time.sleep(0.8)
         return False, 0, True, 0, mismatch_nome
 
     # Leggi ETA e capacità camion
@@ -1011,6 +1013,8 @@ def _compila_e_invia(porta: str, quantita: dict, nome_dest: str,
         provviste2 = _leggi_provviste(screen2)
         if provviste2 == 0:
             log("Provviste esaurite dopo compilazione")
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.8)
             return False, 0, True, 0, mismatch_nome
         log("VAI disabilitato per motivo sconosciuto - annullo")
         adb.keyevent(porta, "KEYCODE_BACK")
@@ -1218,6 +1222,8 @@ def esegui_rifornimento(porta: str, nome: str,
 
             if quota_esaurita:
                 log("Provviste giornaliere esaurite - stop ciclo rifornimento")
+                adb.keyevent(porta, "KEYCODE_BACK")
+                time.sleep(0.8)
                 _salva_stato(nome, porta, True)
                 log(f"Quota salvata su file: {_path_stato(nome, porta)}")
                 stato.vai_in_home(porta, nome, logger)
