@@ -60,8 +60,76 @@ def reset_toggle_override_count(nome=None, porta=None) -> None:
 
 
 # ------------------------------------------------------------------------------
-# Helpers OCR toggle basso-sinistra (secondo sensore)
+# Helpers toggle basso-sinistra (secondo sensore)
+# Dual-mode: template matching (priorità) + OCR (fallback)
+# Controllato da config.py:
+#   STATO_TOGGLE_TEMPLATE_ABILITATO = True  → usa template matching
+#   STATO_TOGGLE_OCR_ABILITATO      = True  → usa OCR come fallback
 # ------------------------------------------------------------------------------
+
+# Cache template cv2 (lazy)
+_tmpl_region_cv  = None
+_tmpl_shelter_cv = None
+
+
+def _carica_toggle_templates() -> bool:
+    """Carica pin_region.png e pin_shelter.png in memoria. Ritorna True se ok."""
+    global _tmpl_region_cv, _tmpl_shelter_cv
+    try:
+        import cv2
+        import os
+        tdir = os.path.join(config.BOT_DIR, "templates")
+        if _tmpl_region_cv is None:
+            t = cv2.imread(os.path.join(tdir, "pin_region.png"))
+            if t is None:
+                return False
+            _tmpl_region_cv = t
+        if _tmpl_shelter_cv is None:
+            t = cv2.imread(os.path.join(tdir, "pin_shelter.png"))
+            if t is None:
+                return False
+            _tmpl_shelter_cv = t
+        return True
+    except Exception:
+        return False
+
+
+def _match_toggle_template(screen_path: str) -> tuple:
+    """
+    Template matching su ROI basso-sinistra (0,450,120,540).
+    Ritorna (stato, descrizione) oppure ('', msg_errore).
+    Soglia validata su dati reali: match=0.993, cross=0.30 → soglia=0.80.
+    """
+    import cv2
+    soglia  = getattr(config, 'STATO_TOGGLE_TEMPLATE_SOGLIA', 0.80)
+    x1, y1, x2, y2 = getattr(config, 'STATO_TOGGLE_ROI', (0, 450, 120, 540))
+
+    if not _carica_toggle_templates():
+        return ('', 'template non caricati')
+
+    img = cv2.imread(screen_path)
+    if img is None:
+        return ('', 'screenshot non leggibile')
+
+    h_img, w_img = img.shape[:2]
+    if w_img != 960 or h_img != 540:
+        sx = w_img / 960.0; sy = h_img / 540.0
+        x1, y1 = int(x1*sx), int(y1*sy)
+        x2, y2 = int(x2*sx), int(y2*sy)
+
+    roi = img[y1:y2, x1:x2]
+    if roi.size == 0:
+        return ('', 'ROI vuota')
+
+    _, sr, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, _tmpl_region_cv,  cv2.TM_CCOEFF_NORMED))
+    _, ss, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, _tmpl_shelter_cv, cv2.TM_CCOEFF_NORMED))
+
+    if sr >= soglia and sr >= ss:
+        return ('home',  f'region={sr:.3f}')
+    if ss >= soglia and ss > sr:
+        return ('mappa', f'shelter={ss:.3f}')
+    return ('', f'sotto soglia: region={sr:.3f} shelter={ss:.3f}')
+
 
 def _scale_box(box, w, h, base_w=960, base_h=540):
     x1, y1, x2, y2 = box
@@ -71,7 +139,7 @@ def _scale_box(box, w, h, base_w=960, base_h=540):
 
 
 def _ocr_testo_toggle(screen_path: str) -> str:
-    """OCR normalizzato (solo lettere) della label sul bottone toggle basso-sinistra."""
+    """OCR normalizzato della label toggle basso-sinistra (fallback)."""
     if not getattr(config, 'STATO_TOGGLE_OCR_ABILITATO', True):
         return ''
     try:
@@ -102,22 +170,47 @@ def _ocr_testo_toggle(screen_path: str) -> str:
 
 
 def _sensore_toggle(screen_path: str) -> tuple:
-    """Deduce stato dalla label toggle: ritorna (stato, testo_ocr)."""
-    txt = _ocr_testo_toggle(screen_path)
-    if not txt:
-        return ('', '')
+    """
+    Deduce stato home/mappa dal pulsante toggle basso-sinistra.
+    Dual-mode: template matching (priorità) → OCR (fallback).
+    Ritorna (stato, descrizione).
+    """
+    use_template = getattr(config, 'STATO_TOGGLE_TEMPLATE_ABILITATO', True)
+    use_ocr      = getattr(config, 'STATO_TOGGLE_OCR_ABILITATO',      True)
+    debug        = getattr(config, 'STATO_TOGGLE_DEBUG',               False)
 
-    key_home = getattr(config, 'STATO_TOGGLE_KEY_HOME', ['REGION', 'REGIONE'])
-    key_map = getattr(config, 'STATO_TOGGLE_KEY_MAPPA', ['SHELTER', 'RIFUGIO'])
+    # ── 1. Template matching ──────────────────────────────────────────────────
+    if use_template:
+        stato_t, desc_t = _match_toggle_template(screen_path)
+        if stato_t in ('home', 'mappa'):
+            if debug:
+                try: print(f"[STATO][TOGGLE][TMPL] {stato_t} ({desc_t})")
+                except Exception: pass
+            return (stato_t, desc_t)
+        if debug:
+            try: print(f"[STATO][TOGGLE][TMPL] nessun match ({desc_t})")
+            except Exception: pass
 
-    for k in key_home:
-        if k and k.upper().replace(' ', '') in txt:
-            return ('home', txt)
-    for k in key_map:
-        if k and k.upper().replace(' ', '') in txt:
-            return ('mappa', txt)
+    # ── 2. OCR fallback ───────────────────────────────────────────────────────
+    if use_ocr:
+        txt = _ocr_testo_toggle(screen_path)
+        if txt:
+            key_home = getattr(config, 'STATO_TOGGLE_KEY_HOME',  ['REGION',  'REGIONE'])
+            key_map  = getattr(config, 'STATO_TOGGLE_KEY_MAPPA', ['SHELTER', 'RIFUGIO'])
+            for k in key_home:
+                if k and k.upper().replace(' ', '') in txt:
+                    if debug:
+                        try: print(f"[STATO][TOGGLE][OCR] home (ocr='{txt}')")
+                        except Exception: pass
+                    return ('home', txt)
+            for k in key_map:
+                if k and k.upper().replace(' ', '') in txt:
+                    if debug:
+                        try: print(f"[STATO][TOGGLE][OCR] mappa (ocr='{txt}')")
+                        except Exception: pass
+                    return ('mappa', txt)
 
-    return ('', txt)
+    return ('', '')
 
 
 # ------------------------------------------------------------------------------
@@ -274,14 +367,94 @@ def _pulisci_overlay(porta: str, nome: str, logger=None) -> str:
     return 'fallito'
 
 
+# ------------------------------------------------------------------------------
+# Rilevamento e pulizia banner home
+#
+# I banner di evento (es. Glory League) appaiono a volte al primo avvio
+# e coprono la home intera. Il toggle rimane visibile sotto il banner,
+# quindi rileva() restituisce 'home' anche con banner aperto (falso positivo).
+# Il tap sul toggle mappa viene assorbito dal banner → vai_in_mappa fallisce.
+#
+# Discriminante: luminosità media zona toggle (0,450,120,540).
+#   Home pulita:  toggle visibile → luminosità >= 40
+#   Banner aperto: zona scura    → luminosità <  40
+#   Calibrato su banner.png: luminosità = 16
+# ------------------------------------------------------------------------------
+
+_BANNER_TOGGLE_ZONA = (0, 450, 120, 540)
+_BANNER_LUM_SOGLIA  = 40
+_BANNER_MAX_BACK    = 5
+_BANNER_MAX_CICLI   = 3
+
+
+def home_pulita(screen_path: str) -> bool:
+    """
+    Verifica se la home è priva di banner controllando la luminosità
+    della zona toggle basso-sinistra.
+    Ritorna True se home pulita, False se banner presente.
+    In caso di errore ritorna True (fail-safe).
+    """
+    try:
+        import numpy as np
+        from PIL import Image
+        img = Image.open(screen_path)
+        arr = np.array(img)
+        x1, y1, x2, y2 = _BANNER_TOGGLE_ZONA
+        zona = arr[y1:y2, x1:x2].astype(float)
+        return float(zona.mean()) >= _BANNER_LUM_SOGLIA
+    except Exception:
+        return True  # fail-safe
+
+
+def pulisci_banner_home(porta: str, nome: str, logger=None) -> bool:
+    """
+    Chiude eventuali banner/overlay di evento sulla home inviando BACK ripetuti.
+    Verifica dopo ogni ciclo la luminosità della zona toggle.
+
+    Ritorna True se home pulita raggiunta, False se banner persistente.
+    Chiamare prima di vai_in_mappa quando i tap non hanno effetto.
+    """
+    def log(msg):
+        if logger:
+            logger(nome, msg)
+
+    screen = adb.screenshot(porta)
+    if not screen:
+        return True  # fail-safe
+
+    if home_pulita(screen):
+        return True  # home già pulita
+
+    log("[BANNER] banner/overlay rilevato — avvio pulizia con BACK")
+
+    for ciclo in range(1, _BANNER_MAX_CICLI + 1):
+        for _ in range(_BANNER_MAX_BACK):
+            adb.keyevent(porta, 'KEYCODE_BACK')
+            time.sleep(0.4)
+
+        time.sleep(0.8)
+        screen = adb.screenshot(porta)
+        if not screen:
+            continue
+
+        if home_pulita(screen):
+            log(f"[BANNER] home pulita dopo ciclo {ciclo} — OK")
+            return True
+
+        log(f"[BANNER] banner ancora presente (ciclo {ciclo}/{_BANNER_MAX_CICLI}) — altro ciclo")
+
+    log(f"[BANNER] ANOMALIA: banner persistente dopo {_BANNER_MAX_CICLI} cicli")
+    return False
+
+
 def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
-    """Porta l'istanza in mappa. Prima pulisce overlay, poi naviga."""
+    """Porta l'istanza in mappa. Prima pulisce overlay e banner, poi naviga."""
 
     def log(msg):
         if logger:
             logger(nome, msg)
 
-    s, _ = rileva(porta, nome=nome)
+    s, screen = rileva(porta, nome=nome)
     log(f"Stato attuale: {s}")
 
     if s not in ('home', 'mappa'):
@@ -295,7 +468,15 @@ def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
         time.sleep(1.5)
         return True
 
+    # Prima di iniziare i tap: verifica che la home sia pulita da banner.
+    # I banner assorbono i tap sul toggle senza cambiare stato → vai_in_mappa
+    # fallisce silenziosamente. pulisci_banner_home usa luminosità zona toggle.
+    if screen and not home_pulita(screen):
+        log("Stato attuale: home con banner — pulizia banner prima dei tap")
+        pulisci_banner_home(porta, nome, logger)
+
     delays_post_tap = [3.0, 4.0, 5.0]
+    tap_falliti_consecutivi = 0
 
     for tentativo in range(MAX_TENTATIVI_MAPPA):
         delay = delays_post_tap[min(tentativo, len(delays_post_tap) - 1)]
@@ -303,7 +484,7 @@ def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
         log(f"Tap mappa ({label}, attesa {delay:.0f}s)...")
         adb.tap(porta, getattr(config, 'TAP_TOGGLE_HOME_MAPPA', (38, 505)), delay_ms=0)
         time.sleep(delay)
-        s_dopo, _ = rileva(porta, nome=nome)
+        s_dopo, screen_dopo = rileva(porta, nome=nome)
         log(f"Stato dopo tap: {s_dopo}")
 
         if s_dopo == 'mappa':
@@ -319,6 +500,17 @@ def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
             if s_dopo == 'mappa':
                 time.sleep(1.5)
                 return True
+
+        # Tap non ha portato in mappa e siamo ancora in home:
+        # possibile banner. Dopo 2 tap falliti consecutivi → pulisci banner.
+        tap_falliti_consecutivi += 1
+        if tap_falliti_consecutivi >= 2 and tentativo < MAX_TENTATIVI_MAPPA - 1:
+            log("[BANNER] tap mappa non efficaci — possibile banner, avvio pulizia")
+            if screen_dopo and not home_pulita(screen_dopo):
+                pulisci_banner_home(porta, nome, logger)
+                tap_falliti_consecutivi = 0
+            else:
+                log("[BANNER] home luminosa — banner non rilevato, continuo")
 
         if tentativo < MAX_TENTATIVI_MAPPA - 1:
             log(f"Ancora in home - riprovo (tentativo {tentativo+2}/{MAX_TENTATIVI_MAPPA})")

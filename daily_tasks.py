@@ -39,7 +39,8 @@
 #  Coordinate (960x540):
 #    TAP_VIP_BADGE            = (85,  52)   — badge VIP in home → apre maschera
 #    TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  — Claim cassaforte
-#    TAP_VIP_POPUP_DISMISS    = (480, 270)  — centro popup report ricompense
+#    TAP_VIP_DISMISS_CASS    = (481, 381)  — tap testo popup cassaforte (chiude popup)
+#    TAP_VIP_DISMISS_FREE    = (483, 391)  — tap testo popup Claim Free (chiude popup)
 #    CASSAFORTE_BADGE_ZONA    = (810, 130, 900, 195)  — zona pallino rosso cassaforte
 #    CLAIM_FREE_BADGE_ZONA    = (650, 270, 730, 320)  — zona pallino rosso claim free (solo detection)
 #    TAP_VIP_CLAIM_FREE       = (575, 380)             — tap centro card Claim Free Daily
@@ -61,186 +62,310 @@ import scheduler
 import config
 import stato as _stato
 import radar_show as _radar
+from verifica_ui import VerificaUI, _match
 
-# --- Coordinate maschera VIP ---
+# ==============================================================================
+# COORDINATE E COSTANTI VIP
+# ==============================================================================
+
+# --- Tap principali ---
 TAP_VIP_BADGE            = (85,  52)   # badge VIP in home → apre maschera
 TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  # Claim cassaforte (in alto a destra)
-TAP_VIP_POPUP_DISMISS    = (480, 270)  # centro popup report ricompense → dismissione
+TAP_VIP_CLAIM_FREE       = (526, 444)  # centro card "Claim Free Daily"
 
-# --- Zone riconoscimento pallino rosso ---
-# Zona cassaforte: area intorno al cofanetto in alto a destra nella maschera VIP
-# Calibrata su vip_7.png (960x540): cofanetto a ~(860,160), badge rosso in alto a dx
-CASSAFORTE_BADGE_ZONA = (810, 130, 900, 195)
+# Dismiss popup ricompense: tap direttamente sul testo identificativo del popup.
+# Il testo è sia il pin di rilevamento che il punto di chiusura.
+#   popup cassaforte: "The more consecutive days..." → centro (481,381)
+#   popup free:       "You received the Daily VIP Reward!" → centro (483,391)
+TAP_VIP_DISMISS_CASS = (481, 381)
+TAP_VIP_DISMISS_FREE = (483, 391)
 
-# Zona claim free: SOLO per rilevare il pallino rosso nell'angolo top-right della card.
-# Calibrata su vip_6.png (960x540): badge rosso a ~(700, 295).
-# NON usare il centro di questa zona per il tap — usare TAP_VIP_CLAIM_FREE sotto.
-CLAIM_FREE_BADGE_ZONA = (650, 270, 730, 320)
+# ==============================================================================
+# PIN VIP — template matching per verifica precondizioni
+#
+#  pin_vip_01_store.png      ROI=(118,109,287,158)  soglia=0.80
+#    → maschera VIP aperta — testo "Today's VIP Points: 200" visibile
+#      (più stabile di "VIP Store": non viene coperto dai banner laterali)
+#
+#  pin_vip_02_cass_chiusa.png ROI=(778,98,866,203)  soglia=0.80
+#    → cassaforte disponibile (icona chiusa + pulsante Claim)
+#
+#  pin_vip_03_cass_aperta.png ROI=(799,89,866,172)  soglia=0.75
+#    → cassaforte già ritirata (icona aperta + timer countdown)
+#
+#  pin_vip_04_free_chiuso.png ROI=(465,423,674,483) soglia=0.80
+#    → Claim Free disponibile (pulsante CLAIM verde visibile)
+#
+#  pin_vip_05_free_aperto.png ROI=(540,298,605,368) soglia=0.80
+#    → Claim Free già ritirato (card con checkmark dorato)
+#
+#  pin_vip_06_popup_cass.png  ROI=(308,345,654,417) soglia=0.80
+#    → popup ricompense cassaforte aperto (testo "The more consecutive...")
+#
+#  pin_vip_07_popup_free.png  ROI=(308,345,654,417) soglia=0.80
+#    → popup ricompense Claim Free aperto (testo "You received the Daily VIP Reward!")
+#
+# Tutti i pin vanno in: C:\Bot-farm\templates\
+# ==============================================================================
 
-# Coordinata tap per attivare "Claim Free Daily" — centro della card viola.
-# Separata dalla zona badge: il pallino rosso è in alto a dx della card,
-# il pulsante attivo è il centro/corpo della card a ~(575, 380).
-# TAP_VIP_CLAIM_FREE = (526, 380)
-TAP_VIP_CLAIM_FREE = (526, 444)
-
-# --- Parametri rilevamento pallino rosso (condivisi con radar_show.py) ---
-BADGE_R_MIN  = getattr(config, "RADAR_BADGE_R_MIN",  150)
-BADGE_G_MAX  = getattr(config, "RADAR_BADGE_G_MAX",  80)
-BADGE_B_MAX  = getattr(config, "RADAR_BADGE_B_MAX",  80)
-BADGE_PX_MIN = 5   # pixel rossi minimi per considerare il badge presente
-
-# Retry per lettura badge (in caso di screenshot instabile)
-BADGE_RETRY     = 2
-BADGE_RETRY_S   = 0.8   # secondi tra retry
+_VIP_PIN = {
+    "store":       ("pin_vip_01_store.png",       (118, 109, 287, 158), 0.80),
+    "cass_chiusa": ("pin_vip_02_cass_chiusa.png",  (778, 98,  866, 203), 0.80),
+    "cass_aperta": ("pin_vip_03_cass_aperta.png",  (799, 89,  866, 172), 0.75),
+    "free_chiuso": ("pin_vip_04_free_chiuso.png",  (465, 423, 674, 483), 0.80),
+    "free_aperto": ("pin_vip_05_free_aperto.png",  (540, 298, 605, 368), 0.80),
+    "popup_cass":  ("pin_vip_06_popup_cass.png",   (308, 345, 654, 417), 0.80),
+    "popup_free":  ("pin_vip_07_popup_free.png",   (308, 345, 654, 417), 0.80),
+}
 
 
-# ------------------------------------------------------------------------------
-# Rilevamento pallino rosso — nucleo algoritmo
-# Stessa logica di radar_show._ha_badge_radar(), generalizzata per zona arbitraria
-# ------------------------------------------------------------------------------
-
-def _ha_badge_rosso(screen_path: str, zona: tuple) -> bool:
+def _vip_check(screen: str, key: str, log_fn=None) -> bool:
     """
-    Verifica se esiste un pallino rosso (badge notifica) nella zona specificata.
-
-    Parametri:
-      screen_path : path screenshot 960x540
-      zona        : (x1, y1, x2, y2) — area di ricerca assoluta
-
-    Ritorna:
-      True  → badge presente (>=BADGE_PX_MIN pixel rossi trovati)
-      False → badge assente
-      True  → in caso di errore (fail-safe: meglio tappare che saltare)
+    Verifica un pin VIP su uno screen già scattato.
+    Ritorna True se il pin è visibile, False altrimenti.
+    Logga sempre il risultato con score.
     """
-    try:
-        img = Image.open(screen_path)
-        arr = np.array(img)
-        x1, y1, x2, y2 = zona
-        roi = arr[y1:y2, x1:x2, :3]
-
-        r = roi[:, :, 0].astype(int)
-        g = roi[:, :, 1].astype(int)
-        b = roi[:, :, 2].astype(int)
-
-        rossi = ((r > BADGE_R_MIN) & (g < BADGE_G_MAX) & (b < BADGE_B_MAX))
-        return int(rossi.sum()) >= BADGE_PX_MIN
-
-    except Exception:
-        return True  # fail-safe
+    tmpl, roi, soglia = _VIP_PIN[key]
+    score = _match(screen, tmpl, roi)
+    ok = score >= soglia
+    if log_fn:
+        stato_str = "OK" if ok else "NON trovato"
+        log_fn(f"[VIP-PIN] {key}: score={score:.3f} soglia={soglia} → {stato_str}")
+    return ok
 
 
-def _leggi_badge_con_retry(porta: str, zona: tuple, label: str, log_fn) -> bool:
+def _vip_screen_check(porta: str, key: str, log_fn=None, retry: int = 1,
+                      retry_s: float = 1.0) -> tuple:
     """
-    Scatta screenshot con retry e verifica badge rosso nella zona.
-    Ritorna True se badge trovato, False se assente dopo tutti i retry.
+    Scatta screenshot e verifica pin VIP. Con retry opzionale.
+    Ritorna (ok: bool, screen: str).
     """
-    for tentativo in range(1, BADGE_RETRY + 1):
+    for tentativo in range(retry + 1):
         screen = adb.screenshot(porta)
         if not screen:
-            log_fn(f"VIP {label}: screenshot fallito (tentativo {tentativo}/{BADGE_RETRY})")
-            time.sleep(BADGE_RETRY_S)
+            if log_fn:
+                log_fn(f"[VIP-PIN] {key}: screenshot fallito (tentativo {tentativo+1})")
+            time.sleep(retry_s)
             continue
+        ok = _vip_check(screen, key, log_fn)
+        if ok or tentativo == retry:
+            return ok, screen
+        time.sleep(retry_s)
+    return False, ""
 
-        trovato = _ha_badge_rosso(screen, zona)
-        log_fn(f"VIP {label}: badge {'TROVATO' if trovato else 'assente'} (tentativo {tentativo})")
-        return trovato
 
-    # Tutti i retry falliti per screenshot → fail-safe True
-    log_fn(f"VIP {label}: tutti gli screenshot falliti — fail-safe True")
-    return True
+# ==============================================================================
+# PULIZIA BANNER HOME
+# La logica è centralizzata in stato.py (home_pulita / pulisci_banner_home).
+# daily_tasks.py usa direttamente _stato.pulisci_banner_home().
+# ==============================================================================
 
 
 # ------------------------------------------------------------------------------
-# Task VIP — ritira ricompense giornaliere (macchina a 3 stati)
+# Task VIP — ritira ricompense giornaliere con precondizioni pin
 # ------------------------------------------------------------------------------
 
 def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
     """
-    Ritira le ricompense VIP giornaliere dalla home.
+    Ritira le ricompense VIP giornaliere.
 
-    Flusso a 3 stati:
-      STATO 0 — APERTURA:  tap badge VIP → attendi maschera
-      STATO 1 — CASSAFORTE: riconoscimento pallino rosso + tap condizionale
-      STATO 2 — CLAIM FREE: riconoscimento pallino rosso + tap condizionale
-      CHIUSURA: BACK → home
+    Logica a tentativi (max 3):
+      Per ogni tentativo:
+        1. vai_in_home
+        2. tap badge VIP
+           [PRE-VIP] pin_vip_01_store visibile?
+             NO → 3x BACK + vai_in_home → prossimo tentativo
+             SI → procedi
 
-    Il pulsante a pagamento (€99.99) non viene mai toccato.
-    Ritorna True se completato senza errori bloccanti.
+        3. CASSAFORTE
+           [CHECK] pin_vip_02_cass_chiusa → disponibile
+                   pin_vip_03_cass_aperta → già ritirata → cass_ok=True
+           se disponibile:
+             tap Claim cassaforte
+             [PRE-POPUP-C]  pin_vip_06_popup_cass visibile?
+             tap dismiss
+             [GATE-C]       pin_vip_01_store tornato visibile?
+             [POST-C]       pin_vip_03_cass_aperta visibile? → cass_ok=True
+
+        4. CLAIM FREE
+           [CHECK] pin_vip_04_free_chiuso → disponibile
+                   pin_vip_05_free_aperto → già ritirato → free_ok=True
+           se disponibile:
+             tap Claim Free
+             [PRE-POPUP-F]  pin_vip_07_popup_free visibile?
+             tap dismiss
+             [GATE-F]       pin_vip_01_store tornato visibile?
+             [POST-F]       pin_vip_05_free_aperto visibile? → free_ok=True
+
+        5. STEP 5 — successo solo se cass_ok AND free_ok
+             SI → BACK + vai_in_home → return True
+             NO → BACK + vai_in_home → prossimo tentativo
+
+    Ritorna True solo a ricompense entrambe confermate.
+    False → verrà riprovato al prossimo ciclo (registra_esecuzione NON chiamato).
     """
     def log(msg):
         if logger: logger(nome, msg)
 
-    # Verifica stato: deve essere in home prima di aprire la maschera VIP
-    if not _stato.vai_in_home(porta, nome, logger):
-        log("VIP: impossibile raggiungere home — skip")
-        return False
+    MAX_TENTATIVI = 3
 
-    try:
-        # ------------------------------------------------------------------
-        # STATO 0 — APERTURA MASCHERA VIP
-        # ------------------------------------------------------------------
-        log("VIP: [0/2] tap badge VIP → apertura maschera")
+    for tentativo in range(1, MAX_TENTATIVI + 1):
+        log(f"VIP: tentativo {tentativo}/{MAX_TENTATIVI}")
+
+        # ── STEP 1: home pulita ───────────────────────────────────────────
+        if not _stato.vai_in_home(porta, nome, logger):
+            log(f"VIP: impossibile raggiungere home (t={tentativo}) — prossimo tentativo")
+            continue
+
+        # ── STEP 2: tap badge VIP + [PRE-VIP] ────────────────────────────
+        log("VIP: tap badge VIP → apertura maschera")
         adb.tap(porta, TAP_VIP_BADGE)
-        time.sleep(2.0)   # attesa caricamento maschera
+        time.sleep(2.0)
 
-        # ------------------------------------------------------------------
-        # STATO 1 — CASSAFORTE
-        # ------------------------------------------------------------------
-        log("VIP: [1/2] verifica badge rosso cassaforte")
-        ha_cassaforte = _leggi_badge_con_retry(
-            porta, CASSAFORTE_BADGE_ZONA, "cassaforte", log
-        )
+        ok_store, _ = _vip_screen_check(porta, "store", log, retry=1, retry_s=1.5)
+        if not ok_store:
+            log("VIP: [PRE-VIP] maschera non aperta — banner? → 3x BACK + vai_in_home")
+            for _ in range(3):
+                adb.keyevent(porta, "KEYCODE_BACK")
+                time.sleep(0.4)
+            _stato.vai_in_home(porta, nome, logger)
+            continue
+        log("VIP: [PRE-VIP] pin_vip_01_store visibile — maschera aperta OK")
 
-        if ha_cassaforte:
-            log("VIP: [1/2] badge cassaforte presente → tap Claim")
+        # ── STEP 3: CASSAFORTE ───────────────────────────────────────────
+        log("VIP: [1] verifica stato cassaforte")
+        screen = adb.screenshot(porta)
+        cass_chiusa = _vip_check(screen, "cass_chiusa", log)  # pin_vip_02
+        cass_aperta = _vip_check(screen, "cass_aperta", log)  # pin_vip_03
+
+        # cass_ok: True se già ritirata o confermata dopo claim
+        cass_ok = cass_aperta  # path "già ritirata" → già True
+
+        if cass_chiusa:
+            log("VIP: [1] pin_vip_02 visibile — cassaforte disponibile → tap Claim")
             adb.tap(porta, TAP_VIP_CLAIM_CASSAFORTE)
-            time.sleep(2.5)  # attesa animazione ricompensa (aumentato per popup lenta)
-            log("VIP: [1/2] dismiss popup report ricompense")
-            adb.tap(porta, TAP_VIP_POPUP_DISMISS)
-            time.sleep(0.8)
-            # Secondo tap dismiss per sicurezza — se la popup è ancora aperta
-            adb.tap(porta, TAP_VIP_POPUP_DISMISS)
-            time.sleep(1.2)  # attesa chiusura popup
+            time.sleep(2.5)
+
+            # [PRE-POPUP-C] pin_vip_06_popup_cass
+            ok_popup_c, _ = _vip_screen_check(porta, "popup_cass", log, retry=1, retry_s=1.0)
+            if ok_popup_c:
+                log("VIP: [PRE-POPUP-C] pin_vip_06 visibile — popup aperto OK")
+            else:
+                log("VIP: [PRE-POPUP-C] ANOMALIA: popup_cass non visibile — tento dismiss")
+
+            adb.tap(porta, TAP_VIP_DISMISS_CASS)
+
+            # [GATE-C] pin_vip_01_store tornato visibile (max 5s)
+            gate_c = False
+            for _t in range(5):
+                time.sleep(1.0)
+                gate_c, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
+                if gate_c:
+                    log(f"VIP: [GATE-C] pin_vip_01 tornato ({_t+1}s) — maschera VIP OK")
+                    break
+            if not gate_c:
+                log("VIP: [GATE-C] ANOMALIA: maschera non tornata — retry dismiss")
+                adb.tap(porta, TAP_VIP_DISMISS_CASS)
+                # Secondo gate dopo retry dismiss (altri 5s)
+                for _t in range(5):
+                    time.sleep(1.0)
+                    gate_c, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
+                    if gate_c:
+                        log(f"VIP: [GATE-C] pin_vip_01 tornato al retry ({_t+1}s) — OK")
+                        break
+                if not gate_c:
+                    log("VIP: [GATE-C] ANOMALIA: maschera ancora non tornata — procedo")
+
+            # [POST-C] pin_vip_03_cass_aperta → conferma ritiro
+            cass_ok, _ = _vip_screen_check(porta, "cass_aperta", log, retry=1, retry_s=1.0)
+            if cass_ok:
+                log("VIP: [POST-C] pin_vip_03 visibile — cassaforte ritirata confermata OK")
+            else:
+                log("VIP: [POST-C] ANOMALIA: pin_vip_03 non visibile — cassaforte non confermata")
+
+        elif cass_aperta:
+            log("VIP: [1] pin_vip_03 visibile — cassaforte già ritirata oggi → skip")
+            # cass_ok già True
         else:
-            log("VIP: [1/2] badge cassaforte assente → skip (già ritirato)")
+            log("VIP: [1] ANOMALIA: nessun pin cassaforte rilevato — skip")
+            # cass_ok rimane False
 
-        # ------------------------------------------------------------------
-        # STATO 2 — CLAIM FREE DAILY
-        # ------------------------------------------------------------------
-        log("VIP: [2/2] verifica badge rosso Claim Free Daily")
-        ha_claim_free = _leggi_badge_con_retry(
-            porta, CLAIM_FREE_BADGE_ZONA, "claim_free", log
-        )
+        # ── STEP 4: CLAIM FREE DAILY ─────────────────────────────────────
+        log("VIP: [2] verifica stato Claim Free Daily")
+        screen = adb.screenshot(porta)
+        free_chiuso = _vip_check(screen, "free_chiuso", log)  # pin_vip_04
+        free_aperto = _vip_check(screen, "free_aperto", log)  # pin_vip_05
 
-        if ha_claim_free:
-            # Tap sul centro della card "Claim Free Daily" — NON sul badge.
-            # Il badge rosso è nell'angolo top-right della card; tapparlo
-            # elimina il pallino ma non attiva il pulsante di claim.
-            log(f"VIP: [2/2] badge claim free presente → tap {TAP_VIP_CLAIM_FREE}")
+        # free_ok: True se già ritirato o confermato dopo claim
+        free_ok = free_aperto  # path "già ritirato" → già True
+
+        if free_chiuso:
+            log(f"VIP: [2] pin_vip_04 visibile — Claim Free disponibile → tap {TAP_VIP_CLAIM_FREE}")
             adb.tap(porta, TAP_VIP_CLAIM_FREE)
-            time.sleep(1.5)  # attesa animazione ricompensa
-            log("VIP: [2/2] dismiss popup report ricompense")
-            adb.tap(porta, TAP_VIP_POPUP_DISMISS)
-            time.sleep(1.0)
+            time.sleep(2.0)
+
+            # [PRE-POPUP-F] pin_vip_07_popup_free
+            ok_popup_f, _ = _vip_screen_check(porta, "popup_free", log, retry=1, retry_s=1.0)
+            if ok_popup_f:
+                log("VIP: [PRE-POPUP-F] pin_vip_07 visibile — popup aperto OK")
+            else:
+                log("VIP: [PRE-POPUP-F] ANOMALIA: popup_free non visibile — tento dismiss")
+
+            adb.tap(porta, TAP_VIP_DISMISS_FREE)
+
+            # [GATE-F] pin_vip_01_store tornato visibile (max 5s)
+            gate_f = False
+            for _t in range(5):
+                time.sleep(1.0)
+                gate_f, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
+                if gate_f:
+                    log(f"VIP: [GATE-F] pin_vip_01 tornato ({_t+1}s) — maschera VIP OK")
+                    break
+            if not gate_f:
+                log("VIP: [GATE-F] ANOMALIA: maschera non tornata — retry dismiss")
+                adb.tap(porta, TAP_VIP_DISMISS_FREE)
+                # Secondo gate dopo retry dismiss (altri 5s)
+                for _t in range(5):
+                    time.sleep(1.0)
+                    gate_f, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
+                    if gate_f:
+                        log(f"VIP: [GATE-F] pin_vip_01 tornato al retry ({_t+1}s) — OK")
+                        break
+                if not gate_f:
+                    log("VIP: [GATE-F] ANOMALIA: maschera ancora non tornata — procedo")
+
+            # [POST-F] pin_vip_05_free_aperto → conferma ritiro
+            free_ok, _ = _vip_screen_check(porta, "free_aperto", log, retry=1, retry_s=1.0)
+            if free_ok:
+                log("VIP: [POST-F] pin_vip_05 visibile — Claim Free ritirato confermato OK")
+            else:
+                log("VIP: [POST-F] ANOMALIA: pin_vip_05 non visibile — Claim Free non confermato")
+
+        elif free_aperto:
+            log("VIP: [2] pin_vip_05 visibile — Claim Free già ritirato oggi → skip")
+            # free_ok già True
         else:
-            log("VIP: [2/2] badge claim free assente → skip (già ritirato oggi)")
+            log("VIP: [2] ANOMALIA: nessun pin Claim Free rilevato — skip")
+            # free_ok rimane False
 
-        log("VIP: ricompense giornaliere completate")
-        return True
+        # ── STEP 5: verifica successo completo ───────────────────────────
+        log(f"VIP: stato finale → cass={'OK' if cass_ok else 'KO'} "
+            f"free={'OK' if free_ok else 'KO'}")
 
-    except Exception as e:
-        log(f"VIP: errore durante esecuzione: {e}")
-        return False
-    finally:
-        # Chiudi maschera VIP con BACK — sempre, anche in caso di errore
-        # Due BACK per chiudere sia eventuali popup interni che la maschera VIP
-        try:
-            adb.keyevent(porta, "KEYCODE_BACK")
-            time.sleep(0.8)
-            adb.keyevent(porta, "KEYCODE_BACK")
-            time.sleep(1.2)
-        except Exception:
-            pass
+        # Chiudi maschera prima di tornare in home
+        adb.keyevent(porta, "KEYCODE_BACK")
+        time.sleep(0.8)
+        _stato.vai_in_home(porta, nome, logger)
+
+        if cass_ok and free_ok:
+            log("VIP: entrambe le ricompense confermate — completato ✓")
+            return True
+
+        log(f"VIP: tentativo {tentativo} incompleto — "
+            f"{'altro tentativo' if tentativo < MAX_TENTATIVI else 'fallito dopo tutti i tentativi'}")
+
+    log(f"VIP: fallito dopo {MAX_TENTATIVI} tentativi — verrà riprovato al prossimo ciclo")
+    return False
 
 
 # ------------------------------------------------------------------------------

@@ -30,6 +30,7 @@ import status as _status
 import config
 import rifornimento
 import allocation
+from verifica_ui import VerificaUI
 
 # Post-marcia: attesa base (ms->s) con limite
 DELAY_POSTMARCIA_BASE = config.DELAY_MARCIA / 1000
@@ -254,7 +255,7 @@ def _nodo_in_territorio(screen_path: str) -> bool:
 # Raccolta: ricerca nodo + OCR coordinate
 # ------------------------------------------------------------------------------
 
-def _cerca_nodo(porta, tipo, coords=None, livello_target=None):
+def _cerca_nodo(porta, tipo, coords=None, livello_target=None, nome='', logger=None):
     """Esegue LENTE → selezione tipo × 2 → imposta livello target → CERCA.
 
     Il popup livello e' sempre ancorato all'icona del tipo selezionato (960x540).
@@ -269,10 +270,15 @@ def _cerca_nodo(porta, tipo, coords=None, livello_target=None):
     Tipi supportati: campo, segheria, acciaio, petrolio.
     coords: UICoords — se None usa config direttamente (retrocompatibilita').
     livello_target: livello nodo da cercare (1-7). Default: config.LIVELLO_RACCOLTA.
+    nome, logger: per logging checkpoint (opzionali, retrocompatibili).
     """
+    def log(msg):
+        if logger:
+            logger(nome, msg)
+
     if coords is not None:
         tap_icona, tap_cerca = coords.per_tipo(tipo)
-        adb.tap(porta, coords.lente)
+        _tap_lente = coords.lente
     else:
         _TAP_MAPPA = {
             "campo":    (config.TAP_CAMPO,       config.TAP_CERCA_CAMPO),
@@ -281,39 +287,71 @@ def _cerca_nodo(porta, tipo, coords=None, livello_target=None):
             "petrolio": (config.TAP_RAFFINERIA,  config.TAP_CERCA_RAFFINERIA),
         }
         tap_icona, tap_cerca = _TAP_MAPPA.get(tipo, _TAP_MAPPA["campo"])
-        adb.tap(porta, config.TAP_LENTE)
+        _tap_lente = config.TAP_LENTE
 
+    _v = VerificaUI(porta, nome, logger)
+
+    # ------------------------------------------------------------------
+    # PRE tap LENTE: verifica lente_visibile (pin_lente)
+    # La lente è visibile SOLO in mappa. Se non visibile dopo retry:
+    # - verifica toggle: se in home → vai_in_mappa e riprova
+    # - se in overlay → procedi comunque (logga anomalia)
+    # ------------------------------------------------------------------
+    _pre_lente_screen = adb.screenshot(porta)
+    if not _v.lente_visibile(_pre_lente_screen):
+        log("[PRE-LENTE] lente NON visibile — attendo 1s e riverifica")
+        time.sleep(1.0)
+        _pre_lente_screen = adb.screenshot(porta)
+        if not _v.lente_visibile(_pre_lente_screen):
+            # Controlla toggle: se in home dobbiamo andare in mappa
+            _s_lente = stato.rileva_screen(_pre_lente_screen)
+            if _s_lente == 'home':
+                log("[PRE-LENTE] siamo in home — eseguo vai_in_mappa")
+                if stato.vai_in_mappa(porta, nome, logger):
+                    time.sleep(1.0)
+                    _pre_lente_screen = adb.screenshot(porta)
+                    if _v.lente_visibile(_pre_lente_screen):
+                        log("[PRE-LENTE] lente visibile dopo vai_in_mappa — OK")
+                    else:
+                        log("[PRE-LENTE] ANOMALIA: lente non visibile anche dopo vai_in_mappa — procedo")
+                else:
+                    log("[PRE-LENTE] ANOMALIA: vai_in_mappa fallito — procedo comunque")
+            else:
+                log(f"[PRE-LENTE] ANOMALIA: lente non visibile, toggle='{_s_lente}' — procedo comunque")
+        else:
+            log("[PRE-LENTE] lente visibile al retry — OK")
+    else:
+        log("[PRE-LENTE] lente visibile — OK")
+
+    adb.tap(porta, _tap_lente)
+
+    # ------------------------------------------------------------------
+    # PRE tap TIPO×2: verifica pin_lente scomparso non necessario —
+    # il pannello lente copre la lente stessa dopo il tap.
+    # Verifica invece tipo_selezionato DOPO il doppio tap (già presente).
+    # ------------------------------------------------------------------
     adb.tap(porta, tap_icona)
     adb.tap(porta, tap_icona)
     time.sleep(1.2)  # attesa apertura popup livello
+
+    # PRE tap SEARCH: verifica che il tipo sia selezionato (alone dorato)
+    # Se non lo è, retry doppio tap con attesa extra
+    if not _v.tipo_selezionato(tipo):
+        log(f"[PRE-SEARCH] tipo '{tipo}' NON selezionato — retry doppio tap")
+        adb.tap(porta, tap_icona)
+        adb.tap(porta, tap_icona)
+        time.sleep(1.5)
+        if not _v.tipo_selezionato(tipo):
+            log(f"[PRE-SEARCH] ANOMALIA: tipo '{tipo}' ancora non selezionato — procedo comunque")
+        else:
+            log(f"[PRE-SEARCH] tipo '{tipo}' selezionato al retry — OK")
+    else:
+        log(f"[PRE-SEARCH] tipo '{tipo}' selezionato — OK")
 
     # Offset misurati su screenshot reali 960x540 (tipo campo icona_x=410):
     #   — : centro x=294  → offset = 410-294 = 116
     #   + : centro x=519  → offset = 519-410 = 109
     #   SEARCH: centro x=413 → offset = 3
-    _OFFSET_MENO_X  = 116
-    _OFFSET_PIU_X   = 109
-    _OFFSET_CERCA_X =   3
-    _MENO_Y         = 295   # y centro pulsante —
-    _PIU_Y          = 293   # y centro pulsante +
-    _CERCA_Y        = 352   # y centro pulsante SEARCH
-
-    icona_x = tap_icona[0]
-    x_meno  = icona_x - _OFFSET_MENO_X
-    x_piu   = icona_x + _OFFSET_PIU_X
-    x_cerca = icona_x + _OFFSET_CERCA_X
-
-    # Livello target: dall'istanza se disponibile, altrimenti config globale
-    _lv = int(livello_target) if livello_target and int(livello_target) > 0 else config.LIVELLO_RACCOLTA
-    _lv = max(1, min(7, _lv))  # clamp 1-7
-
-    # Il popup si ancora all'icona ma non può uscire dal bordo destro (960px).
-    # Per petrolio (icona_x=820) il popup è clamped a destra → coordinate assolute.
-    # Coordinate assolute misurate su screen reali 960x540:
-    #   campo:    —(294,295)  +(519,293)  S(413,352)
-    #   segheria: —(419,295)  +(644,293)  S(538,352)
-    #   acciaio:  —(556,295)  +(781,293)  S(675,352)
-    #   petrolio: —(701,295)  +(890,293)  S(791,352)  ← clamped al bordo dx
     _COORD_ASSOLUTE = {
         "campo":    {"meno": (294, 295), "piu": (519, 293), "search": (413, 352)},
         "segheria": {"meno": (419, 295), "piu": (644, 293), "search": (538, 352)},
@@ -325,8 +363,10 @@ def _cerca_nodo(porta, tipo, coords=None, livello_target=None):
     _tap_piu    = _coords_lv["piu"]
     _tap_search = _coords_lv["search"]
 
-    # Reset a Lv.1: 6 tap su — (livello max=7, quindi 6 tap garantiscono Lv.1)
-    # poi sale a Lv._lv con (_lv - 1) tap su +
+    # Livello target: dall'istanza se disponibile, altrimenti config globale
+    _lv = int(livello_target) if livello_target and int(livello_target) > 0 else config.LIVELLO_RACCOLTA
+    _lv = max(1, min(7, _lv))  # clamp 1-7
+
     import log as _log_cerca
     try: _log_cerca.logger("CERCA", f"[LV] {tipo} Lv.{_lv} reset -6@{_tap_meno} poi +{_lv-1}@{_tap_piu}")
     except Exception: pass
@@ -335,7 +375,7 @@ def _cerca_nodo(porta, tipo, coords=None, livello_target=None):
     for _ in range(_lv - 1):
         adb.tap(porta, _tap_piu, delay_ms=150)
 
-    # SEARCH con coordinate assolute misurate
+    # SEARCH
     adb.tap(porta, _tap_search, delay_ms=config.DELAY_CERCA)
 
 
@@ -345,8 +385,26 @@ def _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, retry_n, logger):
         if logger:
             logger(nome, msg)
 
+    _v_coord = VerificaUI(porta, nome, logger)
+
     time.sleep(1.5)
+
+    # PRE tap LENTE_COORD: tap e poi verifica pin_enter (popup coordinate aperto)
+    # Se non si apre al primo tap → retry 1x con attesa extra
     adb.tap(porta, config.TAP_LENTE_COORD, delay_ms=1300)
+    _pre_enter_screen = adb.screenshot(porta)
+    if not _v_coord.enter_coordinates_visibile(_pre_enter_screen):
+        log("[PRE-COORD] pin_enter NON visibile dopo tap — retry tap lente coord")
+        adb.tap(porta, config.TAP_LENTE_COORD, delay_ms=0)
+        time.sleep(1.3)
+        _pre_enter_screen = adb.screenshot(porta)
+        if not _v_coord.enter_coordinates_visibile(_pre_enter_screen):
+            log("[PRE-COORD] ANOMALIA: pin_enter ancora non visibile — OCR potrebbe fallire")
+        else:
+            log("[PRE-COORD] pin_enter visibile al retry — OK")
+    else:
+        log("[PRE-COORD] pin_enter visibile — OK")
+
     screen_nodo = adb.screenshot(porta)
 
     debug.salva_screen(screen_nodo, nome, f"fase3_popup_{tipo}", squadra, tentativo, f"r{retry_n}")
@@ -417,27 +475,58 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
     _campo_testo = coords.campo_testo if coords else config.TAP_CAMPO_TESTO
     _ok_tastiera = coords.ok_tastiera if coords else config.TAP_OK_TASTIERA
 
-    # 1) RACCOGLI
+    _v = VerificaUI(porta, nome, logger)
+
+    # ------------------------------------------------------------------
+    # 1) PRE RACCOGLI — pin_gather deve essere visibile
+    #    (il popup nodo deve essere aperto a questo punto)
+    # ------------------------------------------------------------------
+    _s_pre_raccogli = adb.screenshot(porta)
+    if not _v.gather_visibile(_s_pre_raccogli):
+        log("[PRE-RACCOGLI] ANOMALIA: GATHER non visibile prima di tap RACCOGLI")
+        # Non abbandoniamo subito: il chiamante ha già verificato PRE-MARCIA.
+        # Logghiamo e procediamo — se la UI è in stato diverso lo scopriremo
+        # al check successivo (PRE-SQUADRA).
+    else:
+        log("[PRE-RACCOGLI] GATHER visibile — OK")
+
     adb.tap(porta, _raccogli)
     time.sleep(0.5)
 
-    # 2) SQUADRA — confronto hash prima/dopo per rilevare maschera non aperta
-    screen_before_squadra = adb.screenshot(porta)
-    before_hash = _md5_file(screen_before_squadra)
-
+    # ------------------------------------------------------------------
+    # 2) PRE SQUADRA — dopo RACCOGLI la maschera squadra deve aprirsi.
+    #    Verifica con pin_gather ancora visibile (siamo ancora nel popup nodo
+    #    con il tab squadra aperto) oppure con maschera_invio_aperta se
+    #    il tap RACCOGLI ha già avanzato la UI.
+    #    In pratica: tap SQUADRA e poi verifica maschera_invio_aperta.
+    # ------------------------------------------------------------------
     adb.tap(porta, _squadra)
     time.sleep(1.4)
 
     screen_pre = adb.screenshot(porta)
     debug.salva_screen(screen_pre, nome, "pre_marcia", squadra, tentativo)
 
-    # Lettura ETA marcia dalla maschera (dopo apertura SQUADRA)
+    # PRE SQUADRA: verifica maschera invio aperta (MARCH/MAX/NO SQUADS/CREATE SQUAD)
+    if not _v.maschera_invio_aperta(screen_pre):
+        log("[PRE-SQUADRA] maschera invio NON aperta dopo tap SQUADRA — retry")
+        adb.tap(porta, _squadra)
+        time.sleep(1.8)
+        screen_pre = adb.screenshot(porta)
+        debug.salva_screen(screen_pre, nome, "pre_marcia_retry", squadra, tentativo)
+        if not _v.maschera_invio_aperta(screen_pre):
+            log("[PRE-SQUADRA] ANOMALIA: maschera ancora non aperta — invio FALLITO")
+            return False, None
+        else:
+            log("[PRE-SQUADRA] maschera aperta al retry — OK")
+    else:
+        log("[PRE-SQUADRA] maschera invio aperta — OK")
+
+    # Lettura ETA marcia dalla maschera
     try:
         eta_s, raw = ocr.leggi_eta_marcia(screen_pre)
     except Exception:
         eta_s, raw = None, ""
 
-    # Cap ETA: valori superiori a 600s sono misread OCR — scartali
     if eta_s is not None and eta_s > 600:
         log(f"ETA marcia: {eta_s}s — valore anomalo (misread OCR), ignorato")
         eta_s = None
@@ -449,34 +538,9 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
         if raw:
             log(f"ETA OCR raw: '{raw[:40]}'")
 
-    pre_hash = _md5_file(screen_pre)
-
-    if before_hash and pre_hash and before_hash == pre_hash:
-        log("SQUADRA: schermata invariata (maschera non aperta) - retry tap SQUADRA")
-        adb.tap(porta, _squadra)
-        time.sleep(1.8)
-        screen_pre = adb.screenshot(porta)
-        debug.salva_screen(screen_pre, nome, "pre_marcia_retry", squadra, tentativo)
-
-        try:
-            eta_s2, raw2 = ocr.leggi_eta_marcia(screen_pre)
-            if eta_s2 is not None and eta_s2 > 600:
-                log(f"ETA marcia (retry): {eta_s2}s — valore anomalo (misread OCR), ignorato")
-                eta_s2 = None
-            if eta_s2 is not None:
-                eta_s = eta_s2
-                log(f"ETA marcia (retry): {eta_s}s ({eta_s//60}m{eta_s%60:02d}s)")
-            elif raw2 and tentativo == 1:
-                log(f"ETA OCR raw (retry): '{raw2[:40]}'")
-        except Exception:
-            pass
-
-        pre_hash = _md5_file(screen_pre)
-        if before_hash and pre_hash and before_hash == pre_hash:
-            log("SQUADRA: ancora schermata invariata dopo retry - considero invio FALLITO")
-            return False, eta_s
-
+    # ------------------------------------------------------------------
     # 3) Imposta truppe se richiesto
+    # ------------------------------------------------------------------
     if n_truppe and n_truppe > 0:
         adb.tap(porta, _cancella)
         time.sleep(0.4)
@@ -491,23 +555,37 @@ def _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger=None, coord
         adb.tap(porta, _ok_tastiera)
         time.sleep(0.25)
 
-    # 4) MARCIA
+    # ------------------------------------------------------------------
+    # 4) PRE MARCIA — verifica maschera ancora aperta prima del tap MARCIA.
+    #    Dopo l'eventuale impostazione truppe la maschera deve essere ancora
+    #    visibile. Se non lo è qualcosa ha chiuso la UI nel frattempo.
+    # ------------------------------------------------------------------
+    screen_pre_marcia = adb.screenshot(porta)
+    if not _v.maschera_invio_aperta(screen_pre_marcia):
+        log("[PRE-MARCIA] ANOMALIA: maschera chiusa prima del tap MARCIA — invio FALLITO")
+        return False, eta_s
+    else:
+        log("[PRE-MARCIA] maschera aperta — tap MARCIA")
+
     adb.tap(porta, _marcia)
     time.sleep(0.8)
 
-    # 5) Verifica schermata cambiata dopo MARCIA
+    # ------------------------------------------------------------------
+    # 5) POST MARCIA — verifica che la maschera si sia chiusa (marcia partita).
+    #    Usa maschera_invio_ancora_aperta (silenzioso): se la maschera è chiusa
+    #    è il comportamento atteso — non serve loggare ogni singolo pin.
+    # ------------------------------------------------------------------
     screen_post = adb.screenshot(porta)
-    post_hash = _md5_file(screen_post)
-
-    if pre_hash and post_hash and pre_hash == post_hash:
-        log("MARCIA: schermata invariata (probabile maschera bloccata) - retry tap MARCIA")
+    if _v.maschera_invio_ancora_aperta(screen_post):
+        log("[POST-MARCIA] ANOMALIA: maschera ancora visibile dopo MARCIA — retry tap MARCIA")
         adb.tap(porta, _marcia)
         time.sleep(1.0)
-        screen_post2 = adb.screenshot(porta)
-        post_hash2 = _md5_file(screen_post2)
-        if pre_hash and post_hash2 and pre_hash == post_hash2:
-            log("MARCIA: ancora schermata invariata dopo retry - considero invio FALLITO")
+        screen_post = adb.screenshot(porta)
+        if _v.maschera_invio_ancora_aperta(screen_post):
+            log("[POST-MARCIA] ANOMALIA: maschera ancora aperta dopo retry — invio FALLITO")
             return False, eta_s
+        else:
+            log("[POST-MARCIA] maschera chiusa al retry — OK")
 
     return True, eta_s
 
@@ -525,7 +603,8 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
 
     _nodo_coord = coords.nodo if coords else config.TAP_NODO
 
-    _cerca_nodo(porta, tipo, coords, livello_target=livello_target)
+    _cerca_nodo(porta, tipo, coords, livello_target=livello_target, nome=nome, logger=logger)
+
     chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 1, logger)
 
     if chiave_nodo is None:
@@ -533,9 +612,53 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
         debug.salva_screen(screen_nodo, nome, "fase3_ocr_coord_fail", squadra, tentativo, "r1")
         adb.keyevent(porta, "KEYCODE_BACK")
         time.sleep(0.4)
+
+        # [CHECK-2] dopo KEYCODE_BACK nel path OCR=None: verifica dove siamo
+        # prima di fare tap sul nodo. Se siamo in 'home' il BACK ha chiuso troppo
+        # e il tap su _nodo_coord finirebbe sullo schermo sbagliato.
+        _c2_screen = adb.screenshot(porta)
+        _c2_stato = stato.rileva_screen(_c2_screen) if _c2_screen else 'sconosciuto'
+        log(f"[CHECK-2] post-BACK (path OCR=None) toggle='{_c2_stato}' (atteso: mappa)")
+        if _c2_stato == 'home':
+            log("[CHECK-2] ANOMALIA: siamo in home dopo BACK — eseguo vai_in_mappa prima del tap nodo")
+            if not stato.vai_in_mappa(porta, nome, logger):
+                log("[CHECK-2] vai_in_mappa fallito — abbandono")
+                return None, False, False, None, False, 0
+            time.sleep(0.5)
+        elif _c2_stato not in ('mappa', 'sconosciuto'):
+            log(f"[CHECK-2] stato '{_c2_stato}' inatteso — tento BACK aggiuntivo")
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.5)
+
         adb.tap(porta, _nodo_coord)
-        time.sleep(0.6)
+        time.sleep(0.8)
+
+        # [CHECK-3] path OCR=None: verifica gather_visibile dopo tap nodo
+        # (nel path con coordinate questo check è già presente sotto)
+        _c3_screen = adb.screenshot(porta)
+        _v_ocrnone = VerificaUI(porta, nome, logger)
+        if not _v_ocrnone.gather_visibile(_c3_screen):
+            log("[CHECK-3] GATHER non visibile nel path OCR=None — retry tap nodo")
+            adb.tap(porta, _nodo_coord)
+            time.sleep(1.0)
+            _c3_screen2 = adb.screenshot(porta)
+            if not _v_ocrnone.gather_visibile(_c3_screen2):
+                log("[CHECK-3] GATHER ancora non visibile — abbandono path OCR=None")
+                adb.keyevent(porta, "KEYCODE_BACK")
+                time.sleep(0.4)
+                return None, False, False, None, False, 0
+            log("[CHECK-3] GATHER visibile al retry — procedo")
+        else:
+            log("[CHECK-3] GATHER visibile — popup nodo aperto correttamente")
+
         ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, tentativo, logger, coords)
+
+        # [CHECK-4] dopo _esegui_marcia fallita nel path OCR=None: diagnostica toggle
+        if not ok:
+            _c4_screen = adb.screenshot(porta)
+            _c4_stato = stato.rileva_screen(_c4_screen) if _c4_screen else 'sconosciuto'
+            log(f"[CHECK-4] marcia fallita — toggle='{_c4_stato}'")
+
         return None, False, ok, eta_s, False, 0
 
     if _blacklist_pulisci_e_verifica(blacklist, blacklist_lock, chiave_nodo):
@@ -543,7 +666,7 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
         debug.salva_screen(screen_nodo, nome, "fase3_blacklist", squadra, tentativo, f"{cx}_{cy}_r1")
 
         chiave_primo = chiave_nodo
-        _cerca_nodo(porta, tipo, coords, livello_target=livello_target)
+        _cerca_nodo(porta, tipo, coords, livello_target=livello_target, nome=nome, logger=logger)
         chiave_nodo, cx, cy, screen_nodo = _leggi_coord_nodo(porta, nome, tipo, squadra, tentativo, 2, logger)
 
         if chiave_nodo == chiave_primo or chiave_nodo is None:
@@ -579,6 +702,22 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
     screen_popup = adb.screenshot(porta)
     debug.salva_screen(screen_popup, nome, "fase4_popup_raccogli", squadra, tentativo, f"{cx}_{cy}")
 
+    # Verifica che il popup nodo si sia aperto (GATHER visibile)
+    # Se non visibile significa che il tap è caduto a vuoto (nodo occupato/tap fuori zona)
+    _v_nodo = VerificaUI(porta, nome, logger)
+    if not _v_nodo.gather_visibile(screen_popup):
+        log(f"Nodo ({cx},{cy}) — GATHER non visibile dopo tap (popup non aperto)")
+        # Retry tap nodo una volta
+        adb.tap(porta, _nodo_coord)
+        time.sleep(1.0)
+        screen_popup = adb.screenshot(porta)
+        if not _v_nodo.gather_visibile(screen_popup):
+            log(f"Nodo ({cx},{cy}) — GATHER ancora non visibile — rollback")
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.4)
+            _blacklist_rollback(blacklist, blacklist_lock, chiave_nodo)
+            return chiave_nodo, False, False, None, False, 0
+
     # --- Controllo livello nodo ---
     # Scarta nodi con livello < NODO_LIVELLO_MIN (default 6) indipendentemente dal territorio.
     # Un nodo Lv.5 dà meno risorse anche se in territorio — non vale la pena raccoglierlo.
@@ -607,12 +746,38 @@ def _tap_invia_squadra(porta, tipo, n_truppe, nome, squadra, tentativo, ciclo,
     _blacklist_reserve(blacklist, blacklist_lock, chiave_nodo)
     log(f"Nodo ({cx},{cy}) prenotato in blacklist (RESERVED)")
 
+    # PRE _esegui_marcia: verifica pin_gather (popup nodo aperto con GATHER visibile)
+    # A questo punto il popup nodo deve essere già aperto dal tap precedente.
+    # Se gather non è visibile significa che il popup si è chiuso o non si è mai aperto.
+    _v_pre_marcia = VerificaUI(porta, nome, logger)
+    _pre_marcia_screen = adb.screenshot(porta)
+    if not _v_pre_marcia.gather_visibile(_pre_marcia_screen):
+        log(f"[PRE-MARCIA] GATHER non visibile prima di _esegui_marcia — retry tap nodo")
+        adb.tap(porta, _nodo_coord)
+        time.sleep(1.0)
+        _pre_marcia_screen = adb.screenshot(porta)
+        if not _v_pre_marcia.gather_visibile(_pre_marcia_screen):
+            log(f"[PRE-MARCIA] ANOMALIA: GATHER ancora non visibile — rollback nodo")
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.4)
+            _blacklist_rollback(blacklist, blacklist_lock, chiave_nodo)
+            return chiave_nodo, False, False, None, False, 0
+        else:
+            log(f"[PRE-MARCIA] GATHER visibile al retry — OK")
+    else:
+        log(f"[PRE-MARCIA] GATHER visibile — OK")
+
     for t in range(1, config.MAX_TENTATIVI_RACCOLTA + 1):
         ok, eta_s = _esegui_marcia(porta, nome, n_truppe, squadra, t, logger, coords)
         if ok:
             return chiave_nodo, False, True, eta_s, False, 0
 
         log(f"MARCIA fallita (tentativo {t}/{config.MAX_TENTATIVI_RACCOLTA}) - recovery UI")
+
+        # [CHECK-4] dopo marcia fallita: diagnostica toggle per capire dove siamo
+        _c4_screen = adb.screenshot(porta)
+        _c4_stato = stato.rileva_screen(_c4_screen) if _c4_screen else 'sconosciuto'
+        log(f"[CHECK-4] marcia fallita (t={t}) — toggle='{_c4_stato}'")
         # Recovery robusta: la maschera truppe/marcia può avere 2-3 livelli aperti.
         # Un singolo BACK non è sufficiente — usa back_rapidi_e_stato per ripristinare
         # uno stato pulito prima del prossimo tentativo o dell'uscita.
@@ -963,6 +1128,21 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
                 log(f"Marcia NON partita - rollback blacklist nodo {chiave_nodo}")
                 _blacklist_rollback(blacklist, blacklist_lock, chiave_nodo)
             fallimenti_cons += 1
+
+            # [CHECK-5] dopo fallimento marcia nel loop: verifica toggle per
+            # accertarsi di essere in mappa prima del prossimo tentativo.
+            # Se siamo in home o overlay, il prossimo _cerca_nodo partirebbe
+            # dallo stato sbagliato.
+            _c5_screen = adb.screenshot(porta)
+            _c5_stato = stato.rileva_screen(_c5_screen) if _c5_screen else 'sconosciuto'
+            log(f"[CHECK-5] post-fallimento toggle='{_c5_stato}' (atteso: mappa)")
+            if _c5_stato == 'home':
+                log("[CHECK-5] in home — eseguo vai_in_mappa prima del prossimo invio")
+                stato.vai_in_mappa(porta, nome, logger)
+            elif _c5_stato not in ('mappa', 'sconosciuto'):
+                log(f"[CHECK-5] stato '{_c5_stato}' — eseguo back_rapidi_e_stato")
+                stato.back_rapidi_e_stato(porta, n=3, logger=logger, nome=nome)
+
             continue
 
         delay = min(DELAY_POSTMARCIA_BASE, MAX_DELAY_POSTMARCIA)
@@ -1006,6 +1186,9 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
             attive_correnti = attive_dopo
             inviate += 1
             fallimenti_cons = 0
+            if attive_correnti >= obiettivo:
+                log("Slot pieni — uscita immediata dal loop (no rientro in mappa)")
+                break
             continue
 
         log(f"Contatore invariato dopo MARCIA: attive={attive_dopo} (era {attive_correnti}) - rileggo tra 3s")
@@ -1021,6 +1204,9 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
             attive_correnti = attive_dopo2
             inviate += 1
             fallimenti_cons = 0
+            if attive_correnti >= obiettivo:
+                log("Slot pieni (retry) — uscita immediata dal loop (no rientro in mappa)")
+                break
             continue
 
         log("Squadra respinta o marcia non partita - rollback nodo")
@@ -1031,14 +1217,10 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
     stato.vai_in_home(porta, nome, logger)
 
     # --- Verifica contatore reale e recupero slot liberi ---
-    # Il contatore interno (attive_correnti) può essere impreciso se l'OCR
-    # ha fallito ad inizio ciclo (caso "assumo 0/N"). Rileggiamo il valore
-    # reale e, se ci sono slot liberi, mandiamo altri raccoglitori.
-    # Questo recupero vale anche se tutti i tipi pianificati erano bloccati:
-    # nel loop principale abbiamo già provato i tipi alternativi, ma se
-    # il contatore era sbagliato potremmo avere slot liberi non sfruttati.
     attive_reali = attive_correnti
-    early_exit_slot_pieni = False  # Step1: evita coda home↔mappa quando slot sono già pieni
+    # Se il loop è uscito con slot pieni (confermato via OCR), salta
+    # tutto il blocco di verifica/recupero: non serve rientrare in mappa.
+    early_exit_slot_pieni = (attive_correnti >= obiettivo)
     if fallimenti_cons < MAX_FALLIMENTI:
         try:
             if stato.vai_in_mappa(porta, nome, logger):
