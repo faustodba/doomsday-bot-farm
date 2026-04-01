@@ -152,7 +152,8 @@ ISTANZE_MUMU = [
     {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
     {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
     {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FauMorfeus", "indice": "10", "porta": 16384, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": True},
+    {"nome": "FauMorfeus", "indice": "10", "porta": 16384, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": False},
+    {"nome": "FAU_10", "indice": "11", "porta": 16384, "truppe": 10000,"max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
 
 ]
 
@@ -243,6 +244,11 @@ ARENA_TAP_CONGRATULATIONS = (480, 435)   # Popup stagionale "Congratulations" ->
 ARENA_TAP_ESAURITE_CANCEL = (394, 331)   # Popup "Purchase more attempts?" -> "Cancel"
 ARENA_MAX_SFIDE           = 5            # sfide giornaliere massime
 ARENA_SCREEN_TMP          = "screen_arena.png"  # relativo a BOT_DIR
+# Mercato Arena (Arena Store)
+ARENA_TAP_CARRELLO        = (905, 68)    # icona carrello → apre Arena Store
+ARENA_TAP_PRIMO_ACQUISTO  = (235, 283)   # primo tap pack → acquista 1 + mostra pulsanti x/max
+ARENA_TAP_MAX_ACQUISTO    = (451, 286)   # pulsante destra (max disponibile ≤50)
+# Rilevamento stato pulsante: template matching pin_360_open.png / pin_360_close.png
 # Pixel check popup "Congratulations" — pulsante giallo "Continue"
 ARENA_CONGRATS_CHECK_XY   = (480, 435)
 ARENA_CONGRATS_BGR_LOW    = (10,  130, 170)   # (B, G, R) minimo
@@ -282,6 +288,21 @@ STATO_TOGGLE_KEY_HOME = ["REGION", "REGIONE"]
 STATO_TOGGLE_KEY_MAPPA = ["SHELTER", "RIFUGIO"]
 STATO_TOGGLE_OCR_PSM = 7
 STATO_TOGGLE_DEBUG = False
+
+# --- Sistema dual-mode riconoscimento toggle (template matching + OCR fallback) ---
+# TEMPLATE=True  + OCR=True  → template prima, OCR come fallback (consigliato)
+# TEMPLATE=True  + OCR=False → solo template (dopo validazione)
+# TEMPLATE=False + OCR=True  → solo OCR (comportamento originale pre-patch)
+STATO_TOGGLE_TEMPLATE_ABILITATO = True
+STATO_TOGGLE_TEMPLATE_SOGLIA    = 0.80   # validata: match=0.993 cross=0.30
+STATO_TOGGLE_ROI                = (0, 450, 120, 540)  # x1,y1,x2,y2 in 960x540
+
+# ==============================================================================
+# 9. VERIFICA UI  (template matching post-tap per conferma visiva)
+# ==============================================================================
+
+# Flag globale — False = ogni check ritorna True immediatamente (nessun overhead)
+VERIFICA_UI_ABILITATA = True
 
 # --- Popup "Uscire dal gioco?" ---
 POPUP_CHECK_X   = 480
@@ -327,7 +348,8 @@ SCHEDULE_ORE_RADAR     = 12   # ore minime tra esecuzioni Radar Show
 SCHEDULE_ORE_ZAINO     = 168  # ore minime tra esecuzioni zaino (7 giorni = lunedì)
 
 # --- Arena of Glory ---
-SCHEDULE_ORE_ARENA     = 24   # ore minime tra esecuzioni arena (1 volta al giorno)
+SCHEDULE_ORE_ARENA         = 24   # ore minime tra esecuzioni arena (1 volta al giorno)
+SCHEDULE_ORE_ARENA_MERCATO = 4   # ore minime tra visite mercato Arena Store
 
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
 ALLEANZA_ABILITATA     = False   # False = salta raccolta doni alleanza
@@ -336,8 +358,33 @@ DAILY_VIP_ABILITATO    = False   # False = salta ricompense VIP giornaliere
 DAILY_RADAR_ABILITATO  = False   # False = salta Radar Show
 RADAR_CENSUS_ABILITATO = False  # True = salva crop icone radar per training classifier (attivare da runtime.json)
 ZAINO_ABILITATO        = False   # False = salta scarico zaino settimanale
-ARENA_OF_GLORY_ABILITATO = True  # False = salta Arena of Glory giornaliera
-ZAINO_MOLTIPLICATORE   = 2.0    # target = soglia × moltiplicatore (es. 2x = carica fino a 2× soglia)
+ARENA_OF_GLORY_ABILITATO  = True   # False = salta Arena of Glory giornaliera
+ARENA_MERCATO_ABILITATO   = True  # False = salta visita mercato Arena Store
+
+# --- Zaino: risorse abilitate ---
+ZAINO_USA_POMODORO     = True    # True = scarica pacchetti pomodoro dallo zaino
+ZAINO_USA_LEGNO        = True    # True = scarica pacchetti legno dallo zaino
+ZAINO_USA_ACCIAIO      = False   # True = scarica pacchetti acciaio dallo zaino
+ZAINO_USA_PETROLIO     = True    # True = scarica pacchetti petrolio dallo zaino
+
+# --- Zaino: soglie target (valore assoluto deposito da raggiungere) ---
+ZAINO_SOGLIA_POMODORO_M = 10.0   # default = RIFORNIMENTO_SOGLIA_CAMPO_M * 2
+ZAINO_SOGLIA_LEGNO_M    = 10.0   # default = RIFORNIMENTO_SOGLIA_LEGNO_M * 2
+ZAINO_SOGLIA_ACCIAIO_M  =  7.0   # default = RIFORNIMENTO_SOGLIA_ACCIAIO_M * 2
+ZAINO_SOGLIA_PETROLIO_M =  5.0   # default = RIFORNIMENTO_SOGLIA_PETROLIO_M * 2
+
+# --- Zaino: coordinate UI (960x540) ---
+ZAINO_TAP_APRI          = (430, 18)    # icona 🍅 barra alta → apre zaino su Food
+ZAINO_TAP_CHIUDI        = (783, 68)    # pulsante X chiude zaino
+ZAINO_SIDEBAR_POMODORO  = (80, 130)    # tab Food nella sidebar sinistra
+ZAINO_SIDEBAR_LEGNO     = (80, 200)    # tab Wood
+ZAINO_SIDEBAR_ACCIAIO   = (80, 270)    # tab Steel
+ZAINO_SIDEBAR_PETROLIO  = (80, 340)    # tab Oil
+ZAINO_TAP_USE_X         = 722          # coordinata X pulsante USE
+ZAINO_TAP_MAX_X         = 601          # coordinata X pulsante Max
+ZAINO_PRIMA_RIGA_Y      = 140          # Y centro prima riga lista
+ZAINO_ALTEZZA_RIGA      = 80           # altezza riga in pixel
+ZAINO_MAX_RIGHE         = 5            # righe visibili senza scroll
 
 # --- Rifornimento alleanza ---
 RIFORNIMENTO_MAX_SPEDIZIONI_CICLO = 5  # max spedizioni rifornimento per istanza in un singolo ciclo
@@ -353,6 +400,13 @@ RIFORNIMENTO_SOGLIA_CAMPO_M    = 5.0
 RIFORNIMENTO_SOGLIA_LEGNO_M    = 5.0
 RIFORNIMENTO_SOGLIA_PETROLIO_M = 2.5
 RIFORNIMENTO_SOGLIA_ACCIAIO_M  = 3.5
+
+# --- Flag abilitazione per-risorsa (True = invia, False = salta sempre) ---
+# Permette di escludere una risorsa dall'invio indipendentemente dalla soglia.
+RIFORNIMENTO_CAMPO_ABILITATO    = True
+RIFORNIMENTO_LEGNO_ABILITATO    = True
+RIFORNIMENTO_PETROLIO_ABILITATO = True
+RIFORNIMENTO_ACCIAIO_ABILITATO  = False
 RIFORNIMENTO_QTA_POMODORO      = 999_000_000
 RIFORNIMENTO_QTA_LEGNO         = 999_000_000
 RIFORNIMENTO_QTA_ACCIAIO       = 999_000_000

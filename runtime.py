@@ -49,7 +49,16 @@ def _default() -> dict:
             "DAILY_RADAR_ABILITATO": getattr(config, "DAILY_RADAR_ABILITATO", True),
             "RADAR_CENSUS_ABILITATO": getattr(config, "RADAR_CENSUS_ABILITATO", False),
             "ZAINO_ABILITATO": getattr(config, "ZAINO_ABILITATO", False),
+            "ZAINO_USA_POMODORO": getattr(config, "ZAINO_USA_POMODORO", True),
+            "ZAINO_USA_LEGNO":    getattr(config, "ZAINO_USA_LEGNO",    True),
+            "ZAINO_USA_ACCIAIO":  getattr(config, "ZAINO_USA_ACCIAIO",  False),
+            "ZAINO_USA_PETROLIO": getattr(config, "ZAINO_USA_PETROLIO", True),
+            "ZAINO_SOGLIA_POMODORO_M": getattr(config, "ZAINO_SOGLIA_POMODORO_M", 10.0),
+            "ZAINO_SOGLIA_LEGNO_M":    getattr(config, "ZAINO_SOGLIA_LEGNO_M",    10.0),
+            "ZAINO_SOGLIA_ACCIAIO_M":  getattr(config, "ZAINO_SOGLIA_ACCIAIO_M",   7.0),
+            "ZAINO_SOGLIA_PETROLIO_M": getattr(config, "ZAINO_SOGLIA_PETROLIO_M",  5.0),
             "ARENA_OF_GLORY_ABILITATO": getattr(config, "ARENA_OF_GLORY_ABILITATO", False),
+            "ARENA_MERCATO_ABILITATO":  getattr(config, "ARENA_MERCATO_ABILITATO",  False),
             "RIFORNIMENTO_ABILITATO": getattr(config, "RIFORNIMENTO_ABILITATO", True),
             "RIFORNIMENTO_MAPPA_ABILITATO": getattr(config, "RIFORNIMENTO_MAPPA_ABILITATO", False),
             "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO": getattr(config, "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO", 5),
@@ -57,6 +66,10 @@ def _default() -> dict:
             "RIFORNIMENTO_SOGLIA_LEGNO_M": getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M", 5.0),
             "RIFORNIMENTO_SOGLIA_PETROLIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5),
             "RIFORNIMENTO_SOGLIA_ACCIAIO_M": getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M", 3.5),
+            "RIFORNIMENTO_CAMPO_ABILITATO":    getattr(config, "RIFORNIMENTO_CAMPO_ABILITATO",    True),
+            "RIFORNIMENTO_LEGNO_ABILITATO":    getattr(config, "RIFORNIMENTO_LEGNO_ABILITATO",    True),
+            "RIFORNIMENTO_PETROLIO_ABILITATO": getattr(config, "RIFORNIMENTO_PETROLIO_ABILITATO", True),
+            "RIFORNIMENTO_ACCIAIO_ABILITATO":  getattr(config, "RIFORNIMENTO_ACCIAIO_ABILITATO",  False),
             "ALLOCATION_RATIO": {
                 "campo": 0.3750,
                 "segheria": 0.3750,
@@ -150,8 +163,26 @@ def applica(rt: dict):
         config.RADAR_CENSUS_ABILITATO = bool(g["RADAR_CENSUS_ABILITATO"])
     if "ZAINO_ABILITATO" in g:
         config.ZAINO_ABILITATO = bool(g["ZAINO_ABILITATO"])
+    if "ZAINO_USA_POMODORO" in g:
+        config.ZAINO_USA_POMODORO = bool(g["ZAINO_USA_POMODORO"])
+    if "ZAINO_USA_LEGNO" in g:
+        config.ZAINO_USA_LEGNO = bool(g["ZAINO_USA_LEGNO"])
+    if "ZAINO_USA_ACCIAIO" in g:
+        config.ZAINO_USA_ACCIAIO = bool(g["ZAINO_USA_ACCIAIO"])
+    if "ZAINO_USA_PETROLIO" in g:
+        config.ZAINO_USA_PETROLIO = bool(g["ZAINO_USA_PETROLIO"])
+    if "ZAINO_SOGLIA_POMODORO_M" in g:
+        config.ZAINO_SOGLIA_POMODORO_M = float(g["ZAINO_SOGLIA_POMODORO_M"])
+    if "ZAINO_SOGLIA_LEGNO_M" in g:
+        config.ZAINO_SOGLIA_LEGNO_M = float(g["ZAINO_SOGLIA_LEGNO_M"])
+    if "ZAINO_SOGLIA_ACCIAIO_M" in g:
+        config.ZAINO_SOGLIA_ACCIAIO_M = float(g["ZAINO_SOGLIA_ACCIAIO_M"])
+    if "ZAINO_SOGLIA_PETROLIO_M" in g:
+        config.ZAINO_SOGLIA_PETROLIO_M = float(g["ZAINO_SOGLIA_PETROLIO_M"])
     if "ARENA_OF_GLORY_ABILITATO" in g:
         config.ARENA_OF_GLORY_ABILITATO = bool(g["ARENA_OF_GLORY_ABILITATO"])
+    if "ARENA_MERCATO_ABILITATO" in g:
+        config.ARENA_MERCATO_ABILITATO = bool(g["ARENA_MERCATO_ABILITATO"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
     if "RIFORNIMENTO_MAPPA_ABILITATO" in g:
@@ -172,6 +203,14 @@ def applica(rt: dict):
         config.RIFORNIMENTO_SOGLIA_PETROLIO_M = float(g["RIFORNIMENTO_SOGLIA_PETROLIO_M"])
     if "RIFORNIMENTO_SOGLIA_ACCIAIO_M" in g:
         config.RIFORNIMENTO_SOGLIA_ACCIAIO_M = float(g["RIFORNIMENTO_SOGLIA_ACCIAIO_M"])
+    if "RIFORNIMENTO_CAMPO_ABILITATO" in g:
+        config.RIFORNIMENTO_CAMPO_ABILITATO    = bool(g["RIFORNIMENTO_CAMPO_ABILITATO"])
+    if "RIFORNIMENTO_LEGNO_ABILITATO" in g:
+        config.RIFORNIMENTO_LEGNO_ABILITATO    = bool(g["RIFORNIMENTO_LEGNO_ABILITATO"])
+    if "RIFORNIMENTO_PETROLIO_ABILITATO" in g:
+        config.RIFORNIMENTO_PETROLIO_ABILITATO = bool(g["RIFORNIMENTO_PETROLIO_ABILITATO"])
+    if "RIFORNIMENTO_ACCIAIO_ABILITATO" in g:
+        config.RIFORNIMENTO_ACCIAIO_ABILITATO  = bool(g["RIFORNIMENTO_ACCIAIO_ABILITATO"])
     if "ALLOCATION_RATIO" in g:
         try:
             import allocation

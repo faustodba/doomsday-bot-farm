@@ -39,10 +39,16 @@
 #    ALTEZZA_RIGA        = 80          — altezza di ogni riga
 #    MAX_RIGHE_VISIBILI  = 5           — righe visibili senza scroll
 #
-#  CONFIG (config.py / runtime.json):
-#    ZAINO_ABILITATO      (bool,  default True)
-#    ZAINO_MOLTIPLICATORE (float, default 2.0)
-#    Soglie risorsa: usa RIFORNIMENTO_SOGLIA_*_M già esistenti
+#  CONFIG (config.py / runtime.json → globali):
+#    ZAINO_ABILITATO          (bool,  default False)
+#    ZAINO_USA_POMODORO       (bool,  default True)
+#    ZAINO_USA_LEGNO          (bool,  default True)
+#    ZAINO_USA_ACCIAIO        (bool,  default False)
+#    ZAINO_USA_PETROLIO       (bool,  default True)
+#    ZAINO_SOGLIA_POMODORO_M  (float, default 10.0)  — target deposito pomodoro
+#    ZAINO_SOGLIA_LEGNO_M     (float, default 10.0)  — target deposito legno
+#    ZAINO_SOGLIA_ACCIAIO_M   (float, default  7.0)  — target deposito acciaio
+#    ZAINO_SOGLIA_PETROLIO_M  (float, default  5.0)  — target deposito petrolio
 # ==============================================================================
 
 import time
@@ -56,23 +62,23 @@ import scheduler
 import ocr
 
 # ------------------------------------------------------------------------------
-# Coordinate UI (960x540)
+# Coordinate UI (960x540) — definite in config.py sezione "Zaino: coordinate UI"
 # ------------------------------------------------------------------------------
-TAP_ZAINO_APRI   = (430, 18)   # icona pomodoro barra alta → apre zaino su Food
-TAP_ZAINO_CHIUDI = (783, 68)   # pulsante X
+TAP_ZAINO_APRI   = config.ZAINO_TAP_APRI
+TAP_ZAINO_CHIUDI = config.ZAINO_TAP_CHIUDI
 
 SIDEBAR = {
-    "pomodoro": (80, 130),
-    "legno":    (80, 200),
-    "acciaio":  (80, 270),
-    "petrolio": (80, 340),
+    "pomodoro": config.ZAINO_SIDEBAR_POMODORO,
+    "legno":    config.ZAINO_SIDEBAR_LEGNO,
+    "acciaio":  config.ZAINO_SIDEBAR_ACCIAIO,
+    "petrolio": config.ZAINO_SIDEBAR_PETROLIO,
 }
 
-TAP_USE_X        = 722   # X pulsante USE
-TAP_MAX_X        = 601   # X pulsante Max (appare dopo primo tap USE)
-PRIMA_RIGA_Y     = 140   # Y centro prima riga
-ALTEZZA_RIGA     = 80    # altezza riga in pixel
-MAX_RIGHE_VISIBILI = 5   # righe visibili senza scroll
+TAP_USE_X          = config.ZAINO_TAP_USE_X
+TAP_MAX_X          = config.ZAINO_TAP_MAX_X
+PRIMA_RIGA_Y       = config.ZAINO_PRIMA_RIGA_Y
+ALTEZZA_RIGA       = config.ZAINO_ALTEZZA_RIGA
+MAX_RIGHE_VISIBILI = config.ZAINO_MAX_RIGHE
 
 # Attese UI
 DELAY_APRI_ZAINO  = 2.0   # attesa apertura maschera zaino
@@ -327,30 +333,39 @@ def esegui_zaino(porta: str, nome: str, logger=None) -> dict:
         log("[ZAINO] OCR deposito fallito — skip")
         return esiti
 
-    # --- Calcola soglie e target ---
-    moltiplica = getattr(config, "ZAINO_MOLTIPLICATORE", 2.0)
-    soglie = {
-        "pomodoro": getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M",    5.0) * 1e6,
-        "legno":    getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M",    5.0) * 1e6,
-        "acciaio":  getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M",  3.5) * 1e6,
-        "petrolio": getattr(config, "RIFORNIMENTO_SOGLIA_PETROLIO_M", 2.5) * 1e6,
+    # --- Booleani per risorsa ---
+    usa = {
+        "pomodoro": config.ZAINO_USA_POMODORO,
+        "legno":    config.ZAINO_USA_LEGNO,
+        "acciaio":  config.ZAINO_USA_ACCIAIO,
+        "petrolio": config.ZAINO_USA_PETROLIO,
     }
-    target = {r: soglie[r] * moltiplica for r in soglie}
 
-    # --- Filtra risorse sotto soglia ---
+    # --- Soglie target per risorsa (valore assoluto a cui portare il deposito) ---
+    target = {
+        "pomodoro": config.ZAINO_SOGLIA_POMODORO_M * 1e6,
+        "legno":    config.ZAINO_SOGLIA_LEGNO_M    * 1e6,
+        "acciaio":  config.ZAINO_SOGLIA_ACCIAIO_M  * 1e6,
+        "petrolio": config.ZAINO_SOGLIA_PETROLIO_M * 1e6,
+    }
+
+    # --- Filtra risorse abilitate e sotto soglia ---
     risorse_da_caricare = {}
-    for risorsa, soglia in soglie.items():
+    for risorsa, tgt in target.items():
+        if not usa[risorsa]:
+            log(f"[ZAINO] {risorsa}: disabilitato (ZAINO_USA_{risorsa.upper()}=False) — skip")
+            continue
         valore = deposito.get(risorsa, -1)
         if valore < 0:
             log(f"[ZAINO] {risorsa}: OCR non disponibile — skip")
             continue
-        if valore < soglia:
-            gap = target[risorsa] - valore
+        if valore < tgt:
+            gap = tgt - valore
             risorse_da_caricare[risorsa] = gap
-            log(f"[ZAINO] {risorsa}: {valore/1e6:.1f}M < soglia {soglia/1e6:.1f}M "
-                f"→ carico fino a {target[risorsa]/1e6:.1f}M (gap={gap/1e6:.2f}M)")
+            log(f"[ZAINO] {risorsa}: {valore/1e6:.1f}M < target {tgt/1e6:.1f}M "
+                f"→ carico (gap={gap/1e6:.2f}M)")
         else:
-            log(f"[ZAINO] {risorsa}: {valore/1e6:.1f}M >= soglia {soglia/1e6:.1f}M — skip")
+            log(f"[ZAINO] {risorsa}: {valore/1e6:.1f}M >= target {tgt/1e6:.1f}M — skip")
 
     if not risorse_da_caricare:
         log("[ZAINO] tutte le risorse sopra soglia — nessun carico necessario")

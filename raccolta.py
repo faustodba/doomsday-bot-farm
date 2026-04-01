@@ -897,6 +897,12 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
         else:
             log("Arena disabilitata (ARENA_OF_GLORY_ABILITATO=False) - skip")
 
+        # --- ARENA MERCATO — acquisto pack ogni 4h ---
+        if getattr(config, "ARENA_MERCATO_ABILITATO", False):
+            _run_guarded("Arena Mercato", lambda: _daily.esegui_mercato_arena_guarded(porta, nome, logger))
+        else:
+            log("Arena Mercato disabilitato (ARENA_MERCATO_ABILITATO=False) - skip")
+
         # --- INVIO RISORSE — eseguito in HOME prima di andare in mappa ---
         def _do_rifornimento():
             try:

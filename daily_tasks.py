@@ -313,9 +313,11 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
 
             adb.tap(porta, TAP_VIP_DISMISS_FREE)
 
-            # [GATE-F] pin_vip_01_store tornato visibile (max 5s)
+            # [GATE-F] Attende che il popup si chiuda e la maschera VIP torni visibile.
+            # Il popup free è più lento a chiudersi rispetto al popup cassaforte.
+            # Polling su pin_vip_01_store con finestra più ampia (8s invece di 5s).
             gate_f = False
-            for _t in range(5):
+            for _t in range(8):
                 time.sleep(1.0)
                 gate_f, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
                 if gate_f:
@@ -324,8 +326,7 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
             if not gate_f:
                 log("VIP: [GATE-F] ANOMALIA: maschera non tornata — retry dismiss")
                 adb.tap(porta, TAP_VIP_DISMISS_FREE)
-                # Secondo gate dopo retry dismiss (altri 5s)
-                for _t in range(5):
+                for _t in range(8):
                     time.sleep(1.0)
                     gate_f, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
                     if gate_f:
@@ -335,7 +336,7 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
                     log("VIP: [GATE-F] ANOMALIA: maschera ancora non tornata — procedo")
 
             # [POST-F] pin_vip_05_free_aperto → conferma ritiro
-            free_ok, _ = _vip_screen_check(porta, "free_aperto", log, retry=1, retry_s=1.0)
+            free_ok, _ = _vip_screen_check(porta, "free_aperto", log, retry=2, retry_s=1.0)
             if free_ok:
                 log("VIP: [POST-F] pin_vip_05 visibile — Claim Free ritirato confermato OK")
             else:
@@ -352,9 +353,14 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
         log(f"VIP: stato finale → cass={'OK' if cass_ok else 'KO'} "
             f"free={'OK' if free_ok else 'KO'}")
 
-        # Chiudi maschera prima di tornare in home
-        adb.keyevent(porta, "KEYCODE_BACK")
-        time.sleep(0.8)
+        # Chiudi maschera prima di tornare in home.
+        # IMPORTANTE: vai_in_home() usa pixel check su (40,505) che può dare
+        # falso positivo se si è ancora sulla maschera VIP (pixel scuro in quella zona).
+        # I BACK espliciti svuotano lo stack UI prima che vai_in_home verifichi.
+        for _ in range(3):
+            adb.keyevent(porta, "KEYCODE_BACK")
+            time.sleep(0.5)
+        time.sleep(0.5)
         _stato.vai_in_home(porta, nome, logger)
 
         if cass_ok and free_ok:
@@ -405,9 +411,12 @@ def esegui_daily_tasks(porta: str, nome: str, logger=None, coords=None) -> dict:
         esiti["vip"] = None
 
     # --- Torna in home tra VIP e Radar ---
-    # Il finally del VIP manda KEYCODE_BACK ma potrebbe non essere sufficiente
-    # a chiudere completamente la maschera prima che Radar parta.
-    # Forziamo vai_in_home esplicito con attesa minima.
+    # BACK espliciti per svuotare lo stack UI prima che vai_in_home verifichi
+    # con pixel check (che potrebbe dare falso positivo se ancora su overlay VIP).
+    for _ in range(3):
+        adb.keyevent(porta, "KEYCODE_BACK")
+        time.sleep(0.5)
+    time.sleep(0.5)
     if not _stato.vai_in_home(porta, nome, logger):
         log("[DAILY] Impossibile raggiungere home prima di Radar — skip")
         esiti["radar"] = False
@@ -502,5 +511,37 @@ def esegui_arena_guarded(porta: str, nome: str, logger=None) -> bool:
             + (" (esaurite)" if res["esaurite"] else ""))
     else:
         log("[DAILY] Arena: nessuna sfida eseguita — ts non aggiornato")
+
+    return res.get("errore") is None
+
+
+def esegui_mercato_arena_guarded(porta: str, nome: str, logger=None) -> bool:
+    """
+    Esegue solo il task Mercato Arena se schedulato e abilitato.
+    Chiamare da raccolta.py wrappato in _run_guarded("Arena Mercato", ...).
+    Schedulazione: SCHEDULE_ORE_ARENA_MERCATO (default 4h), chiave "arena_mercato".
+    """
+    def log(msg):
+        if logger: logger(nome, msg)
+
+    if not getattr(config, "ARENA_MERCATO_ABILITATO", False):
+        log("[DAILY] Arena Mercato disabilitato — skip")
+        return True
+
+    if not scheduler.deve_eseguire(nome, porta, "arena_mercato", logger):
+        return True  # già eseguito nelle ultime 4h
+
+    import arena_of_glory as _arena
+    adb_exe = getattr(config, "MUMU_ADB", "") or getattr(config, "ADB_EXE", "")
+    res = _arena.run_mercato_arena(
+        adb_exe=adb_exe,
+        porta=porta,
+        log_fn=lambda m: logger(nome, m) if logger else None,
+    )
+
+    # Registra sempre — anche acquisti=0 significa "visitato, niente da comprare"
+    scheduler.registra_esecuzione(nome, porta, "arena_mercato")
+    log(f"[DAILY] Arena Mercato: {res.get('acquisti', 0)} cicli acquisto"
+        + (f" — errore: {res['errore']}" if res.get("errore") else ""))
 
     return res.get("errore") is None

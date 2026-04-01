@@ -356,6 +356,7 @@
 		<div class="rt-row"><label>Supply via Map</label><input type="checkbox" id="rt_rif_mappa_on"></div>
 		<div class="rt-row"><label>Weekly Backpack</label><input type="checkbox" id="rt_zaino_on"></div>
 		<div class="rt-row"><label>Arena of Glory</label><input type="checkbox" id="rt_arena_on"></div>
+		<div class="rt-row"><label>Arena Store (mercato)</label><input type="checkbox" id="rt_arena_mercato_on"></div>
 		 <div class="rt-adv-header" onclick="rtToggleAvanzate()">
 		   <span class="rt-adv-arrow" id="rt_adv_arrow">▶</span>
 		   <span class="rt-adv-title">Avanzate</span>
@@ -366,15 +367,63 @@
 		</div>
       </div>
 
-      <!-- Colonna destra: soglie invio -->
+      <!-- Colonna destra: soglie invio + zaino -->
       <div>
+        <!-- Rifornimento: soglia + abilitato sulla stessa riga -->
         <div style="margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Soglie invio rifornimento</div>
-        <div class="rt-row"><label>🍅 Campo (M)</label><input type="number" id="rt_soglia_campo" min="0.1" max="50" step="0.5"></div>
-        <div class="rt-row"><label>🪵 Legno (M)</label><input type="number" id="rt_soglia_legno" min="0.1" max="50" step="0.5"></div>
-        <div class="rt-row"><label>🛢 Petrolio (M)</label><input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5"></div>
-        <div class="rt-row"><label>⚙ Acciaio (M)</label><input type="number" id="rt_soglia_acc" min="0.1" max="25" step="0.5"></div>
- <div class="rt-row"><label>📦 Max spedizioni/ciclo</label><input type="number" id="rt_rif_max_sped" min="0" max="50" step="1"></div>
- <div style="font-size:10px;color:var(--text-dim);margin-top:-2px;margin-bottom:6px">0 = nessun limite (debug). Default 5.</div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:4px 6px;margin-bottom:2px;font-size:9px;color:var(--text-dim);letter-spacing:1px">
+          <span></span><span style="text-align:right">Soglia (M)</span><span style="text-align:center">On</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:2px;font-size:12px">
+          <label style="color:var(--text-mid)">🍅 Campo</label>
+          <input type="number" id="rt_soglia_campo" min="0.1" max="50" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_rif_campo_on" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:2px;font-size:12px">
+          <label style="color:var(--text-mid)">🪵 Legno</label>
+          <input type="number" id="rt_soglia_legno" min="0.1" max="50" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_rif_legno_on" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:2px;font-size:12px">
+          <label style="color:var(--text-mid)">🛢 Petrolio</label>
+          <input type="number" id="rt_soglia_pet" min="0.1" max="25" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_rif_pet_on" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:6px;font-size:12px">
+          <label style="color:var(--text-mid)">⚙ Acciaio</label>
+          <input type="number" id="rt_soglia_acc" min="0.1" max="25" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_rif_acc_on" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Deseleziona per escludere sempre la risorsa, indipendentemente dalla soglia.</div>
+        <div class="rt-row"><label>📦 Max spedizioni/ciclo</label><input type="number" id="rt_rif_max_sped" min="0" max="50" step="1"></div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:-2px;margin-bottom:10px">0 = nessun limite (debug). Default 5.</div>
+
+        <!-- Zaino: soglia + abilitato sulla stessa riga -->
+        <div style="margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Zaino (target deposito)</div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:4px 6px;margin-bottom:2px;font-size:9px;color:var(--text-dim);letter-spacing:1px">
+          <span></span><span style="text-align:right">Target (M)</span><span style="text-align:center">On</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:2px;font-size:12px">
+          <label style="color:var(--text-mid)">🍅 Pomodoro</label>
+          <input type="number" id="rt_zaino_soglia_pom" min="0.1" max="200" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_zaino_usa_pom" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:2px;font-size:12px">
+          <label style="color:var(--text-mid)">🪵 Legno</label>
+          <input type="number" id="rt_zaino_soglia_leg" min="0.1" max="200" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_zaino_usa_leg" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:2px;font-size:12px">
+          <label style="color:var(--text-mid)">🛢 Petrolio</label>
+          <input type="number" id="rt_zaino_soglia_pet" min="0.1" max="100" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_zaino_usa_pet" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 70px 20px;align-items:center;gap:5px 6px;margin-bottom:4px;font-size:12px">
+          <label style="color:var(--text-mid)">⚙ Acciaio</label>
+          <input type="number" id="rt_zaino_soglia_acc" min="0.1" max="100" step="0.5" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right;width:100%">
+          <input type="checkbox" id="rt_zaino_usa_acc" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;justify-self:center">
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">Deseleziona per non scaricare mai quella risorsa dallo zaino.</div>
 
         <div style="margin-top:10px;margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Allocation ratio</div>
         <div class="rt-row"><label>🍅 Campo %</label><input type="number" id="rt_r_campo" min="0" max="100" step="1"></div>
@@ -393,8 +442,8 @@
   <div class="rt-card">
     <h3>Istanze</h3>
     <div style="display:flex;gap:10px;margin-bottom:10px">
-      <label class="rt-toggle"><input type="radio" name="rt_emu" value="bs" checked onchange="rtCaricaIstanze()"> BlueStacks</label>
-      <label class="rt-toggle"><input type="radio" name="rt_emu" value="mumu" onchange="rtCaricaIstanze()"> MuMuPlayer</label>
+      <label class="rt-toggle"><input type="radio" name="rt_emu" value="bs" onchange="rtCaricaIstanze()"> BlueStacks</label>
+      <label class="rt-toggle"><input type="radio" name="rt_emu" value="mumu" checked onchange="rtCaricaIstanze()"> MuMuPlayer</label>
     </div>
     <div style="overflow-x:auto">
       <table class="ist-table">
@@ -981,12 +1030,25 @@ function rtPopolaGlobali(rt) {
   _setChk("rt_radar_census_on", g.RADAR_CENSUS_ABILITATO ?? false);
   _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
   _setChk("rt_rif_mappa_on",   g.RIFORNIMENTO_MAPPA_ABILITATO ?? false);
-  _setChk("rt_arena_on",        g.ARENA_OF_GLORY_ABILITATO ?? true);
+  _setChk("rt_arena_on",         g.ARENA_OF_GLORY_ABILITATO ?? false);
+  _setChk("rt_arena_mercato_on", g.ARENA_MERCATO_ABILITATO  ?? false);
   _setVal("rt_soglia_campo",    g.RIFORNIMENTO_SOGLIA_CAMPO_M    ?? 5.0);
   _setVal("rt_soglia_legno",    g.RIFORNIMENTO_SOGLIA_LEGNO_M    ?? 5.0);
   _setVal("rt_soglia_pet",      g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
   _setVal("rt_soglia_acc",      g.RIFORNIMENTO_SOGLIA_ACCIAIO_M  ?? 3.5);
+  _setChk("rt_rif_campo_on",    g.RIFORNIMENTO_CAMPO_ABILITATO    ?? true);
+  _setChk("rt_rif_legno_on",    g.RIFORNIMENTO_LEGNO_ABILITATO    ?? true);
+  _setChk("rt_rif_pet_on",      g.RIFORNIMENTO_PETROLIO_ABILITATO ?? true);
+  _setChk("rt_rif_acc_on",      g.RIFORNIMENTO_ACCIAIO_ABILITATO  ?? false);
   _setVal("rt_rif_max_sped", g.RIFORNIMENTO_MAX_SPEDIZIONI_CICLO ?? 5);
+  _setVal("rt_zaino_soglia_pom", g.ZAINO_SOGLIA_POMODORO_M ?? 10.0);
+  _setVal("rt_zaino_soglia_leg", g.ZAINO_SOGLIA_LEGNO_M    ?? 10.0);
+  _setVal("rt_zaino_soglia_pet", g.ZAINO_SOGLIA_PETROLIO_M ??  5.0);
+  _setVal("rt_zaino_soglia_acc", g.ZAINO_SOGLIA_ACCIAIO_M  ??  7.0);
+  _setChk("rt_zaino_usa_pom",    g.ZAINO_USA_POMODORO ?? true);
+  _setChk("rt_zaino_usa_leg",    g.ZAINO_USA_LEGNO    ?? true);
+  _setChk("rt_zaino_usa_pet",    g.ZAINO_USA_PETROLIO ?? true);
+  _setChk("rt_zaino_usa_acc",    g.ZAINO_USA_ACCIAIO  ?? false);
   
   const ratio = g.ALLOCATION_RATIO || {};
   _setVal("rt_r_campo", Math.round((ratio.campo    ?? 0.375)  * 100));
@@ -1130,10 +1192,23 @@ async function rtSalvaGlobali() {
 	RIFORNIMENTO_ABILITATO:         		document.getElementById("rt_rif_on").checked,
 	RIFORNIMENTO_MAPPA_ABILITATO:   		document.getElementById("rt_rif_mappa_on").checked,
 	ARENA_OF_GLORY_ABILITATO:				document.getElementById("rt_arena_on").checked,
+    ARENA_MERCATO_ABILITATO:                document.getElementById("rt_arena_mercato_on").checked,
     RIFORNIMENTO_SOGLIA_CAMPO_M:          +_val("rt_soglia_campo"),
     RIFORNIMENTO_SOGLIA_LEGNO_M:          +_val("rt_soglia_legno"),
     RIFORNIMENTO_SOGLIA_PETROLIO_M:       +_val("rt_soglia_pet"),
     RIFORNIMENTO_SOGLIA_ACCIAIO_M:        +_val("rt_soglia_acc"),
+    RIFORNIMENTO_CAMPO_ABILITATO:         document.getElementById("rt_rif_campo_on").checked,
+    RIFORNIMENTO_LEGNO_ABILITATO:         document.getElementById("rt_rif_legno_on").checked,
+    RIFORNIMENTO_PETROLIO_ABILITATO:      document.getElementById("rt_rif_pet_on").checked,
+    RIFORNIMENTO_ACCIAIO_ABILITATO:       document.getElementById("rt_rif_acc_on").checked,
+    ZAINO_SOGLIA_POMODORO_M:              +_val("rt_zaino_soglia_pom"),
+    ZAINO_SOGLIA_LEGNO_M:                 +_val("rt_zaino_soglia_leg"),
+    ZAINO_SOGLIA_PETROLIO_M:              +_val("rt_zaino_soglia_pet"),
+    ZAINO_SOGLIA_ACCIAIO_M:               +_val("rt_zaino_soglia_acc"),
+    ZAINO_USA_POMODORO:                   document.getElementById("rt_zaino_usa_pom").checked,
+    ZAINO_USA_LEGNO:                      document.getElementById("rt_zaino_usa_leg").checked,
+    ZAINO_USA_PETROLIO:                   document.getElementById("rt_zaino_usa_pet").checked,
+    ZAINO_USA_ACCIAIO:                    document.getElementById("rt_zaino_usa_acc").checked,
     ALLOCATION_RATIO: { campo, segheria: seg, petrolio: pet, acciaio: acc },
   };
 
