@@ -8,6 +8,7 @@
 # - Contatore override PER ISTANZA (nome+porta) thread-safe.
 # ============================================================================== 
 
+import os
 import time
 import threading
 from collections import defaultdict
@@ -128,7 +129,9 @@ def _match_toggle_template(screen_path: str) -> tuple:
         return ('home',  f'region={sr:.3f}')
     if ss >= soglia and ss > sr:
         return ('mappa', f'shelter={ss:.3f}')
-    return ('', f'sotto soglia: region={sr:.3f} shelter={ss:.3f}')
+    # Sotto soglia: template non trovati → icona toggle non visibile → overlay
+    # Usiamo 'overlay' come stato per distinguere da errore tecnico ('')
+    return ('overlay', f'sotto soglia: region={sr:.3f} shelter={ss:.3f}')
 
 
 def _scale_box(box, w, h, base_w=960, base_h=540):
@@ -254,7 +257,28 @@ def rileva_screen(screen: str, porta=None, nome=None) -> str:
         if is_beige and is_ok_yellow:
             return 'overlay'
 
-    # 2) Home/Mappa (campionamento multiplo)
+    # 2) Template matching SEMPRE per prima (Region=home, Shelter=mappa).
+    #    È il sensore primario: se trova l'icona toggle → risposta certa.
+    #    Se non trova nulla (overlay, VIP, messaggi, ecc.) → overlay.
+    #    Il pixel check viene usato solo come fallback tecnico se cv2/template
+    #    non sono disponibili (s_tmpl == '').
+    s_tmpl, desc_tmpl = _sensore_toggle(screen)
+
+    # Trovato Region o Shelter → risposta certa
+    if s_tmpl in ('home', 'mappa'):
+        if getattr(config, 'STATO_TOGGLE_DEBUG', False):
+            try:
+                print(f"[STATO][TOGGLE] {nome or '?'}:{porta or '?'} → {s_tmpl} ({desc_tmpl})")
+            except Exception:
+                pass
+        return s_tmpl
+
+    # Template sotto soglia → icona toggle non visibile → siamo su un overlay
+    if s_tmpl == 'overlay':
+        return 'overlay'
+
+    # s_tmpl == '' → errore tecnico (cv2 mancante, template non caricati, screenshot corrotto)
+    # → fallback sul pixel check originale
     offsets = getattr(config, 'STATO_CHECK_OFFSETS', [(0, 0)])
     soglia_r = config.STATO_SOGLIA_R
     min_sum = getattr(config, 'STATO_MIN_MAPPA_RGB_SUM', 20)
@@ -276,41 +300,36 @@ def rileva_screen(screen: str, porta=None, nome=None) -> str:
             mappa_votes += 1
 
     if valid == 0:
-        base = 'sconosciuto'
-    else:
-        if home_votes > mappa_votes and home_votes > 0:
-            base = 'home'
-        elif mappa_votes >= home_votes and mappa_votes > 0:
-            base = 'mappa'
-        else:
-            base = 'overlay'
+        return 'sconosciuto'
+    if home_votes > mappa_votes and home_votes > 0:
+        return 'home'
+    if mappa_votes >= home_votes and mappa_votes > 0:
+        return 'mappa'
+    return 'overlay'
 
-    # 3) Secondo sensore solo se incerto
-    incerto = (valid < 3) or (abs(home_votes - mappa_votes) <= 1)
-    if incerto:
-        s2, txt2 = _sensore_toggle(screen)
-        if s2 in ('home', 'mappa'):
-            override = (s2 != base)
-            if override:
-                with _TOGGLE_OVERRIDE_LOCK:
-                    _TOGGLE_OVERRIDE_COUNT[_key_istanza(nome, porta)] += 1
-                    n = int(_TOGGLE_OVERRIDE_COUNT[_key_istanza(nome, porta)])
-            else:
-                n = get_toggle_override_count(nome, porta)
 
-            if getattr(config, 'STATO_TOGGLE_DEBUG', False) and override:
-                try:
-                    ident = f"{nome or '?'}:{porta or '?'}"
-                    print(
-                        f"[STATO][TOGGLE] {ident} override#{n}: base={base} "
-                        f"(home_votes={home_votes}, mappa_votes={mappa_votes}, valid={valid}) "
-                        f"-> toggle={s2} (ocr='{txt2}')"
-                    )
-                except Exception:
-                    pass
-            return s2
-
-    return base
+def _salva_debug_stato(screen_path: str, stato: str, porta=None, nome=None):
+    """
+    Se STATO_TOGGLE_DEBUG=True, copia lo screenshot in debug_stato/ con nome
+    {HHMMSSmmm}_{nome}_{porta}_{stato}.png
+    Permette di vedere cosa stava guardando il bot quando ha dichiarato
+    home / mappa / overlay / sconosciuto.
+    """
+    if not getattr(config, 'STATO_TOGGLE_DEBUG', False):
+        return
+    if not screen_path or not os.path.exists(screen_path):
+        return
+    try:
+        import shutil
+        from datetime import datetime
+        debug_dir = os.path.join(config.BOT_DIR, "debug_stato")
+        os.makedirs(debug_dir, exist_ok=True)
+        ts = datetime.now().strftime("%H%M%S%f")[:9]
+        label = f"{nome or 'x'}_{porta or 'x'}"
+        dest = os.path.join(debug_dir, f"{ts}_{label}_{stato}.png")
+        shutil.copy2(screen_path, dest)
+    except Exception:
+        pass
 
 
 def rileva(porta: str, nome: str = None) -> tuple:
@@ -318,7 +337,9 @@ def rileva(porta: str, nome: str = None) -> tuple:
     screen = adb.screenshot(porta)
     if not screen:
         return ('sconosciuto', '')
-    return (rileva_screen(screen, porta=porta, nome=nome), screen)
+    s = rileva_screen(screen, porta=porta, nome=nome)
+    _salva_debug_stato(screen, s, porta=porta, nome=nome)
+    return (s, screen)
 
 
 # ------------------------------------------------------------------------------

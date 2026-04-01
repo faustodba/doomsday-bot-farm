@@ -1064,6 +1064,17 @@ def esegui_rifornimento(porta: str, nome: str,
         "acciaio":  getattr(config, "RIFORNIMENTO_SOGLIA_ACCIAIO_M",  3.5),
     }
 
+    # Flag abilitazione per-risorsa (False = salta sempre, indipendentemente dalla soglia)
+    abilitati = {
+        "pomodoro": getattr(config, "RIFORNIMENTO_CAMPO_ABILITATO",    True),
+        "legno":    getattr(config, "RIFORNIMENTO_LEGNO_ABILITATO",    True),
+        "petrolio": getattr(config, "RIFORNIMENTO_PETROLIO_ABILITATO", True),
+        "acciaio":  getattr(config, "RIFORNIMENTO_ACCIAIO_ABILITATO",  False),
+    }
+    disabilitati = [r for r, v in abilitati.items() if not v]
+    if disabilitati:
+        log(f"Risorse disabilitate (flag): {disabilitati}")
+
     # Quantità per spedizione da config (con fallback a default)
     quantita = {
         "pomodoro": getattr(config, "RIFORNIMENTO_QTA_POMODORO", QTA_DEFAULT["pomodoro"]),
@@ -1080,9 +1091,11 @@ def esegui_rifornimento(porta: str, nome: str,
         "petrolio": petrolio_m,
     }
 
-    # Risorse da considerare: qta > 0 in config E soglia non infinita
+    # Risorse da considerare: qta > 0 in config E soglia non infinita E flag abilitato
     risorse_config = {r: q for r, q in quantita.items()
-                      if q > 0 and soglie.get(r, float("inf")) < float("inf")}
+                      if q > 0
+                      and soglie.get(r, float("inf")) < float("inf")
+                      and abilitati.get(r, True)}
     if not risorse_config:
         log("Nessuna risorsa configurata per l'invio - skip")
         return 0

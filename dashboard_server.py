@@ -144,36 +144,55 @@ def _run():
             try:
                 cfg = _importa_modulo("config", cartella)
 
+                # FIX: leggi overrides da runtime.json e applicali ai valori config.py.
+                # Senza questo, la dashboard calcola il delta rispetto ai valori "nudi"
+                # di config.py, ignorando gli overrides già attivi — causando la
+                # cancellazione dell'override quando il valore UI coincide con config.py.
+                rt_path = os.path.join(cartella, "runtime.json")
+                try:
+                    with open(rt_path, "r", encoding="utf-8") as f:
+                        rt = json.load(f)
+                except Exception:
+                    rt = {}
+                ovr_bs   = rt.get("overrides", {}).get("bs",   {})
+                ovr_mumu = rt.get("overrides", {}).get("mumu", {})
+
                 def _bs(ist):
+                    nome = ist.get("nome", "")
+                    ovr  = ovr_bs.get(nome, {})
                     return {
-                        "nome": ist.get("nome", ""),
+                        "nome": nome,
                         "interno": ist.get("interno", ""),
                         "porta": ist.get("porta", ""),
-                        "truppe": ist.get("truppe", 12000),
-                        "max_squadre": ist.get("max_squadre", 4),
-                        "layout": ist.get("layout", 1),
-                        "lingua": ist.get("lingua", "it"),
-                        "abilitata": ist.get("abilitata", True),
-                        "livello": ist.get("livello", 6),
-                        "profilo": ist.get("profilo", "full"),
+                        "truppe":      ovr.get("truppe",      ist.get("truppe",      12000)),
+                        "max_squadre": ovr.get("max_squadre", ist.get("max_squadre", 4)),
+                        "layout":      ovr.get("layout",      ist.get("layout",      1)),
+                        "lingua":      ovr.get("lingua",      ist.get("lingua",      "it")),
+                        "abilitata":   ovr.get("abilitata",   ist.get("abilitata",   True)),
+                        "livello":     ovr.get("livello",     ist.get("livello",     6)),
+                        "profilo":     ovr.get("profilo",     ist.get("profilo",     "full")),
+                        "fascia_oraria": ovr.get("fascia_oraria", ist.get("fascia_oraria", "")),
                     }
 
                 def _mumu(ist):
+                    nome = ist.get("nome", "")
+                    ovr  = ovr_mumu.get(nome, {})
                     return {
-                        "nome": ist.get("nome", ""),
+                        "nome": nome,
                         "indice": ist.get("indice", ""),
                         "porta": ist.get("porta", 16384),
-                        "truppe": ist.get("truppe", 12000),
-                        "max_squadre": ist.get("max_squadre", 4),
-                        "layout": ist.get("layout", 1),
-                        "lingua": ist.get("lingua", "en"),
-                        "abilitata": ist.get("abilitata", True),
-                        "livello": ist.get("livello", 6),
-                        "profilo": ist.get("profilo", "full"),
+                        "truppe":      ovr.get("truppe",      ist.get("truppe",      12000)),
+                        "max_squadre": ovr.get("max_squadre", ist.get("max_squadre", 4)),
+                        "layout":      ovr.get("layout",      ist.get("layout",      1)),
+                        "lingua":      ovr.get("lingua",      ist.get("lingua",      "en")),
+                        "abilitata":   ovr.get("abilitata",   ist.get("abilitata",   True)),
+                        "livello":     ovr.get("livello",     ist.get("livello",     6)),
+                        "profilo":     ovr.get("profilo",     ist.get("profilo",     "full")),
+                        "fascia_oraria": ovr.get("fascia_oraria", ist.get("fascia_oraria", "")),
                     }
 
                 payload = {
-                    "istanze_bs": [_bs(i) for i in getattr(cfg, "ISTANZE", [])],
+                    "istanze_bs":   [_bs(i)   for i in getattr(cfg, "ISTANZE",      [])],
                     "istanze_mumu": [_mumu(i) for i in getattr(cfg, "ISTANZE_MUMU", [])],
                 }
                 return self._json_ok(payload)
