@@ -1,0 +1,13 @@
+pip install -r requirements.txt
+
+# 1. Aggiungi/modifica template (GUI interattiva)
+python template_builder.py map_full06.png
+
+# 2. Scan
+python scan.py map_full06.png --debug
+
+# 3. Etichetta (GUI)
+python labeler.py detections.json map_full00.png
+
+# 4. Addestra
+python train.py

@@ -62,3 +62,8 @@ step_*/
 
 # Cartella di appoggio (refuso)
 appoggio/
+ 
+# Runtime output 
+ciclo_*/ 
+radar_archive/ 
+patch_*.py 

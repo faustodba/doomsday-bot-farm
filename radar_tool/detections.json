@@ -1,0 +1,102 @@
+[
+  {
+    "cx": 402,
+    "cy": 343,
+    "w": 17,
+    "h": 19,
+    "conf": 1.0,
+    "template": "pin_para",
+    "tipo": "para",
+    "crop_file": "crop_0402_0343_para_pin_para.png"
+  },
+  {
+    "cx": 602,
+    "cy": 346,
+    "w": 30,
+    "h": 33,
+    "conf": 0.9999983906745911,
+    "template": "pin_skull_2",
+    "tipo": "skull_2",
+    "crop_file": "crop_0602_0346_skull_2_pin_skull_2.png"
+  },
+  {
+    "cx": 548,
+    "cy": 283,
+    "w": 21,
+    "h": 16,
+    "conf": 0.9502943158149719,
+    "template": "pin_ped",
+    "tipo": "ped",
+    "crop_file": "crop_0548_0283_ped_pin_ped.png"
+  },
+  {
+    "cx": 641,
+    "cy": 271,
+    "w": 21,
+    "h": 16,
+    "conf": 0.9493362307548523,
+    "template": "pin_ped",
+    "tipo": "ped",
+    "crop_file": "crop_0641_0271_ped_pin_ped.png"
+  },
+  {
+    "cx": 685,
+    "cy": 207,
+    "w": 17,
+    "h": 19,
+    "conf": 0.947387158870697,
+    "template": "pin_para",
+    "tipo": "para",
+    "crop_file": "crop_0685_0207_para_pin_para.png"
+  },
+  {
+    "cx": 722,
+    "cy": 316,
+    "w": 36,
+    "h": 12,
+    "conf": 0.9098060131072998,
+    "template": "pin_soldati_1",
+    "tipo": "soldati_1",
+    "crop_file": "crop_0722_0316_soldati_1_pin_soldati_1.png"
+  },
+  {
+    "cx": 330,
+    "cy": 141,
+    "w": 38,
+    "h": 40,
+    "conf": 0.8306500315666199,
+    "template": "pin_card",
+    "tipo": "card",
+    "crop_file": "crop_0330_0141_card_pin_card.png"
+  },
+  {
+    "cx": 344,
+    "cy": 247,
+    "w": 66,
+    "h": 98,
+    "conf": 0.7936721444129944,
+    "template": "pin_avatar9",
+    "tipo": "avatar9",
+    "crop_file": "crop_0344_0247_avatar9_pin_avatar9.png"
+  },
+  {
+    "cx": 456,
+    "cy": 199,
+    "w": 43,
+    "h": 43,
+    "conf": 0.7686936855316162,
+    "template": "pin_av12",
+    "tipo": "av12",
+    "crop_file": "crop_0456_0199_av12_pin_av12.png"
+  },
+  {
+    "cx": 490,
+    "cy": 198,
+    "w": 21,
+    "h": 16,
+    "conf": 0.654505729675293,
+    "template": "pin_ped",
+    "tipo": "ped",
+    "crop_file": "crop_0490_0198_ped_pin_ped.png"
+  }
+]

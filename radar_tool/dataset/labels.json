@@ -1,0 +1,92 @@
+[
+  {
+    "crop_file": "crop_0402_0343_para_pin_para.png",
+    "label": "paracadute",
+    "cx": 402,
+    "cy": 343,
+    "conf": 1.0,
+    "tipo": "para",
+    "template": "pin_para"
+  },
+  {
+    "crop_file": "crop_0602_0346_skull_2_pin_skull_2.png",
+    "label": "skull",
+    "cx": 602,
+    "cy": 346,
+    "conf": 0.9999983906745911,
+    "tipo": "skull_2",
+    "template": "pin_skull_2"
+  },
+  {
+    "crop_file": "crop_0548_0283_ped_pin_ped.png",
+    "label": "pedone",
+    "cx": 548,
+    "cy": 283,
+    "conf": 0.9502943158149719,
+    "tipo": "ped",
+    "template": "pin_ped"
+  },
+  {
+    "crop_file": "crop_0641_0271_ped_pin_ped.png",
+    "label": "pedone",
+    "cx": 641,
+    "cy": 271,
+    "conf": 0.9493362307548523,
+    "tipo": "ped",
+    "template": "pin_ped"
+  },
+  {
+    "crop_file": "crop_0685_0207_para_pin_para.png",
+    "label": "paracadute",
+    "cx": 685,
+    "cy": 207,
+    "conf": 0.947387158870697,
+    "tipo": "para",
+    "template": "pin_para"
+  },
+  {
+    "crop_file": "crop_0722_0316_soldati_1_pin_soldati_1.png",
+    "label": "soldati",
+    "cx": 722,
+    "cy": 316,
+    "conf": 0.9098060131072998,
+    "tipo": "soldati_1",
+    "template": "pin_soldati_1"
+  },
+  {
+    "crop_file": "crop_0330_0141_card_pin_card.png",
+    "label": "card",
+    "cx": 330,
+    "cy": 141,
+    "conf": 0.8306500315666199,
+    "tipo": "card",
+    "template": "pin_card"
+  },
+  {
+    "crop_file": "crop_0344_0247_avatar9_pin_avatar9.png",
+    "label": "avatar",
+    "cx": 344,
+    "cy": 247,
+    "conf": 0.7936721444129944,
+    "tipo": "avatar9",
+    "template": "pin_avatar9"
+  },
+  {
+    "crop_file": "crop_0456_0199_av12_pin_av12.png",
+    "label": "avatar",
+    "cx": 456,
+    "cy": 199,
+    "conf": 0.7686936855316162,
+    "tipo": "av12",
+    "template": "pin_av12"
+  },
+  {
+    "crop_file": "crop_0490_0198_ped_pin_ped.png",
+    "label": "scarta",
+    "cx": 490,
+    "cy": 198,
+    "conf": 0.654505729675293,
+    "tipo": "ped",
+    "template": "pin_ped"
+  }
+]

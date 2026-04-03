@@ -1,0 +1,86 @@
+[
+  {
+    "cx": 385,
+    "cy": 351,
+    "tipo_tmpl": "skull",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0385_0351_skull_pin_skull.png"
+  },
+  {
+    "cx": 417,
+    "cy": 209,
+    "tipo_tmpl": "pedoni",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0417_0209_pedoni_pin_pedoni.png"
+  },
+  {
+    "cx": 360,
+    "cy": 163,
+    "tipo_tmpl": "av2",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0360_0163_av2_pin_av2.png"
+  },
+  {
+    "cx": 723,
+    "cy": 324,
+    "tipo_tmpl": "camion",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0723_0324_camion_pin_camion.png"
+  },
+  {
+    "cx": 667,
+    "cy": 221,
+    "tipo_tmpl": "av1",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0667_0221_av1_pin_av1.png"
+  },
+  {
+    "cx": 282,
+    "cy": 201,
+    "tipo_tmpl": "auto",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0282_0201_auto_pin_auto.png"
+  },
+  {
+    "cx": 589,
+    "cy": 133,
+    "tipo_tmpl": "card",
+    "conf_tmpl": 1.0,
+    "crop_file": "crop_0589_0133_card_pin_card.png"
+  },
+  {
+    "cx": 467,
+    "cy": 300,
+    "tipo_tmpl": "pedoni",
+    "conf_tmpl": 0.924,
+    "crop_file": "crop_0467_0300_pedoni_pin_pedoni.png"
+  },
+  {
+    "cx": 464,
+    "cy": 375,
+    "tipo_tmpl": "auto",
+    "conf_tmpl": 0.898,
+    "crop_file": "crop_0464_0375_auto_pin_auto.png"
+  },
+  {
+    "cx": 330,
+    "cy": 371,
+    "tipo_tmpl": "pedoni",
+    "conf_tmpl": 0.897,
+    "crop_file": "crop_0330_0371_pedoni_pin_pedoni.png"
+  },
+  {
+    "cx": 360,
+    "cy": 276,
+    "tipo_tmpl": "pedoni",
+    "conf_tmpl": 0.894,
+    "crop_file": "crop_0360_0276_pedoni_pin_pedoni.png"
+  },
+  {
+    "cx": 467,
+    "cy": 205,
+    "tipo_tmpl": "auto",
+    "conf_tmpl": 0.849,
+    "crop_file": "crop_0467_0205_auto_pin_auto.png"
+  }
+]

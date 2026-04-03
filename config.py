@@ -242,13 +242,11 @@ ARENA_TAP_START_CHALLENGE = (730, 451)   # Schermata sfida -> "START CHALLENGE"
 ARENA_TAP_RISULTATO       = (480, 468)   # Schermata risultato -> "Tap to Continue"
 ARENA_TAP_CONGRATULATIONS = (480, 435)   # Popup stagionale "Congratulations" -> "Continue"
 ARENA_TAP_ESAURITE_CANCEL = (394, 331)   # Popup "Purchase more attempts?" -> "Cancel"
+ARENA_TAP_CARRELLO        = (905,  68)   # Lista Arena -> icona carrello (apre Arena Store)
+ARENA_TAP_PRIMO_ACQUISTO  = (235, 283)   # Arena Store -> tap primo acquisto pack
+ARENA_TAP_MAX_ACQUISTO    = (451, 286)   # Arena Store -> tap pulsante max quantità (≤50)
 ARENA_MAX_SFIDE           = 5            # sfide giornaliere massime
 ARENA_SCREEN_TMP          = "screen_arena.png"  # relativo a BOT_DIR
-# Mercato Arena (Arena Store)
-ARENA_TAP_CARRELLO        = (905, 68)    # icona carrello → apre Arena Store
-ARENA_TAP_PRIMO_ACQUISTO  = (235, 283)   # primo tap pack → acquista 1 + mostra pulsanti x/max
-ARENA_TAP_MAX_ACQUISTO    = (451, 286)   # pulsante destra (max disponibile ≤50)
-# Rilevamento stato pulsante: template matching pin_360_open.png / pin_360_close.png
 # Pixel check popup "Congratulations" — pulsante giallo "Continue"
 ARENA_CONGRATS_CHECK_XY   = (480, 435)
 ARENA_CONGRATS_BGR_LOW    = (10,  130, 170)   # (B, G, R) minimo
@@ -349,17 +347,17 @@ SCHEDULE_ORE_ZAINO     = 168  # ore minime tra esecuzioni zaino (7 giorni = lune
 
 # --- Arena of Glory ---
 SCHEDULE_ORE_ARENA         = 24   # ore minime tra esecuzioni arena (1 volta al giorno)
-SCHEDULE_ORE_ARENA_MERCATO = 4   # ore minime tra visite mercato Arena Store
+SCHEDULE_ORE_ARENA_MERCATO = 12   # ore minime tra esecuzioni mercato arena (chiave "arena_mercato")
 
 # --- Feature flags task periodici (sovrascrivibili da runtime.json → globali) ---
 ALLEANZA_ABILITATA     = False   # False = salta raccolta doni alleanza
 MESSAGGI_ABILITATI     = False   # False = salta raccolta messaggi sistema/alleanza
 DAILY_VIP_ABILITATO    = False   # False = salta ricompense VIP giornaliere
-DAILY_RADAR_ABILITATO  = False   # False = salta Radar Show
-RADAR_CENSUS_ABILITATO = False  # True = salva crop icone radar per training classifier (attivare da runtime.json)
+DAILY_RADAR_ABILITATO  = True   # False = salta Radar Show
+RADAR_CENSUS_ABILITATO = True  # True = salva crop icone radar per training classifier (attivare da runtime.json)
+RADAR_TOOL_THRESHOLD   = 0.65   # soglia template matching radar_tool detector
 ZAINO_ABILITATO        = False   # False = salta scarico zaino settimanale
-ARENA_OF_GLORY_ABILITATO  = True   # False = salta Arena of Glory giornaliera
-ARENA_MERCATO_ABILITATO   = True  # False = salta visita mercato Arena Store
+ARENA_OF_GLORY_ABILITATO = False  # False = salta Arena of Glory giornaliera
 
 # --- Zaino: risorse abilitate ---
 ZAINO_USA_POMODORO     = True    # True = scarica pacchetti pomodoro dallo zaino
