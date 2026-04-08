@@ -343,28 +343,35 @@
     <h3>Parametri globali</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
 
-      <!-- Colonna sinistra: ciclo + task on/off -->
+      <!-- Colonna sinistra: ciclo + task on/off su due colonne -->
       <div>
         <div class="rt-row"><label>Istanze parallele</label><input type="number" id="rt_blocco" min="1" max="10" step="1"></div>
         <div class="rt-row"><label>Attesa tra cicli (min)</label><input type="number" id="rt_wait" min="1" max="60" step="1"></div>
         <div style="margin-top:10px;margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Task</div>
-        <div class="rt-row"><label>Alliance Gifts</label><input type="checkbox" id="rt_alleanza_on"></div>
-        <div class="rt-row"><label>Alliance Messages</label><input type="checkbox" id="rt_messaggi_on"></div>
-        <div class="rt-row"><label>VIP Daily Rewards</label><input type="checkbox" id="rt_vip_on"></div>
-        <div class="rt-row"><label>Radar Show</label><input type="checkbox" id="rt_radar_on"></div>
-        <div class="rt-row"><label>Supply Resources</label><input type="checkbox" id="rt_rif_on"></div>
-		<div class="rt-row"><label>Supply via Map</label><input type="checkbox" id="rt_rif_mappa_on"></div>
-		<div class="rt-row"><label>Weekly Backpack</label><input type="checkbox" id="rt_zaino_on"></div>
-		<div class="rt-row"><label>Arena of Glory</label><input type="checkbox" id="rt_arena_on"></div>
-		<div class="rt-row"><label>Arena Store (mercato)</label><input type="checkbox" id="rt_arena_mercato_on"></div>
-		 <div class="rt-adv-header" onclick="rtToggleAvanzate()">
-		   <span class="rt-adv-arrow" id="rt_adv_arrow">▶</span>
-		   <span class="rt-adv-title">Avanzate</span>
-		 </div>
-		 <div id="rt_adv_body" class="rt-adv-body" style="display:none">
-		   <div class="rt-row"><label>Radar Census (training)</label><input type="checkbox" id="rt_radar_census_on"></div>
-		   <div class="rt-adv-hint">Genera crop icone Radar per training/diagnostica. Usare solo se necessario.</div>
-		</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">
+          <div>
+            <div class="rt-row"><label>Alliance Gifts</label><input type="checkbox" id="rt_alleanza_on"></div>
+            <div class="rt-row"><label>Alliance Messages</label><input type="checkbox" id="rt_messaggi_on"></div>
+            <div class="rt-row"><label>VIP Daily Rewards</label><input type="checkbox" id="rt_vip_on"></div>
+            <div class="rt-row"><label>Radar Show</label><input type="checkbox" id="rt_radar_on"></div>
+            <div class="rt-row"><label>Supply Resources</label><input type="checkbox" id="rt_rif_on"></div>
+            <div class="rt-row"><label>Supply via Map</label><input type="checkbox" id="rt_rif_mappa_on"></div>
+          </div>
+          <div>
+            <div class="rt-row"><label>Weekly Backpack</label><input type="checkbox" id="rt_zaino_on"></div>
+            <div class="rt-row"><label>Arena of Glory</label><input type="checkbox" id="rt_arena_on"></div>
+            <div class="rt-row"><label>Arena Store (mercato)</label><input type="checkbox" id="rt_arena_mercato_on"></div>
+            <div class="rt-row"><label>Mysterious Store</label><input type="checkbox" id="rt_store_on"></div>
+          </div>
+        </div>
+        <div class="rt-adv-header" onclick="rtToggleAvanzate()" style="margin-top:8px">
+          <span class="rt-adv-arrow" id="rt_adv_arrow">▶</span>
+          <span class="rt-adv-title">Avanzate</span>
+        </div>
+        <div id="rt_adv_body" class="rt-adv-body" style="display:none">
+          <div class="rt-row"><label>Radar Census (training)</label><input type="checkbox" id="rt_radar_census_on"></div>
+          <div class="rt-adv-hint">Genera crop icone Radar per training/diagnostica. Usare solo se necessario.</div>
+        </div>
       </div>
 
       <!-- Colonna destra: soglie invio + zaino -->
@@ -396,7 +403,9 @@
         </div>
         <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Deseleziona per escludere sempre la risorsa, indipendentemente dalla soglia.</div>
         <div class="rt-row"><label>📦 Max spedizioni/ciclo</label><input type="number" id="rt_rif_max_sped" min="0" max="50" step="1"></div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:-2px;margin-bottom:10px">0 = nessun limite (debug). Default 5.</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:-2px;margin-bottom:6px">0 = nessun limite (debug). Default 5.</div>
+        <div class="rt-row"><label>🏰 Rifugio X</label><input type="number" id="rt_rifugio_x" min="1" max="9999" step="1"></div>
+        <div class="rt-row" style="margin-bottom:10px"><label>🏰 Rifugio Y</label><input type="number" id="rt_rifugio_y" min="1" max="9999" step="1"></div>
 
         <!-- Zaino: soglia + abilitato sulla stessa riga -->
         <div style="margin-bottom:4px;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Zaino (target deposito)</div>
@@ -1030,8 +1039,11 @@ function rtPopolaGlobali(rt) {
   _setChk("rt_radar_census_on", g.RADAR_CENSUS_ABILITATO ?? false);
   _setChk("rt_rif_on",          g.RIFORNIMENTO_ABILITATO ?? true);
   _setChk("rt_rif_mappa_on",   g.RIFORNIMENTO_MAPPA_ABILITATO ?? false);
+  _setVal("rt_rifugio_x",      g.RIFUGIO_X ?? 684);
+  _setVal("rt_rifugio_y",      g.RIFUGIO_Y ?? 532);
   _setChk("rt_arena_on",         g.ARENA_OF_GLORY_ABILITATO ?? false);
   _setChk("rt_arena_mercato_on", g.ARENA_MERCATO_ABILITATO  ?? false);
+  _setChk("rt_store_on",         g.STORE_ABILITATO          ?? false);
   _setVal("rt_soglia_campo",    g.RIFORNIMENTO_SOGLIA_CAMPO_M    ?? 5.0);
   _setVal("rt_soglia_legno",    g.RIFORNIMENTO_SOGLIA_LEGNO_M    ?? 5.0);
   _setVal("rt_soglia_pet",      g.RIFORNIMENTO_SOGLIA_PETROLIO_M ?? 2.5);
@@ -1191,8 +1203,11 @@ async function rtSalvaGlobali() {
 	RADAR_CENSUS_ABILITATO: 				document.getElementById("rt_radar_census_on").checked,
 	RIFORNIMENTO_ABILITATO:         		document.getElementById("rt_rif_on").checked,
 	RIFORNIMENTO_MAPPA_ABILITATO:   		document.getElementById("rt_rif_mappa_on").checked,
+	RIFUGIO_X:                              +_val("rt_rifugio_x"),
+	RIFUGIO_Y:                              +_val("rt_rifugio_y"),
 	ARENA_OF_GLORY_ABILITATO:				document.getElementById("rt_arena_on").checked,
     ARENA_MERCATO_ABILITATO:                document.getElementById("rt_arena_mercato_on").checked,
+    STORE_ABILITATO:                        document.getElementById("rt_store_on").checked,
     RIFORNIMENTO_SOGLIA_CAMPO_M:          +_val("rt_soglia_campo"),
     RIFORNIMENTO_SOGLIA_LEGNO_M:          +_val("rt_soglia_legno"),
     RIFORNIMENTO_SOGLIA_PETROLIO_M:       +_val("rt_soglia_pet"),
