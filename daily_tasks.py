@@ -40,7 +40,8 @@
 #    TAP_VIP_BADGE            = (85,  52)   — badge VIP in home → apre maschera
 #    TAP_VIP_CLAIM_CASSAFORTE = (830, 160)  — Claim cassaforte
 #    TAP_VIP_DISMISS_CASS    = (481, 381)  — tap testo popup cassaforte (chiude popup)
-#    TAP_VIP_DISMISS_FREE    = (483, 391)  — tap testo popup Claim Free (chiude popup)
+#    TAP_VIP_DISMISS_FREE         = (483, 391)  — tap testo popup Claim Free (non usato post-fix)
+#    TAP_VIP_CHIUDI_REWARD_FREE   = (456, 437)  — chiude schermata ricompensa Claim Free (richiede tap)
 #    CASSAFORTE_BADGE_ZONA    = (810, 130, 900, 195)  — zona pallino rosso cassaforte
 #    CLAIM_FREE_BADGE_ZONA    = (650, 270, 730, 320)  — zona pallino rosso claim free (solo detection)
 #    TAP_VIP_CLAIM_FREE       = (575, 380)             — tap centro card Claim Free Daily
@@ -79,6 +80,7 @@ TAP_VIP_CLAIM_FREE       = (526, 444)  # centro card "Claim Free Daily"
 #   popup free:       "You received the Daily VIP Reward!" → centro (483,391)
 TAP_VIP_DISMISS_CASS = (481, 381)
 TAP_VIP_DISMISS_FREE = (483, 391)
+TAP_VIP_CHIUDI_REWARD_FREE = (456, 437)  # chiude schermata ricompensa Claim Free (richiede tap)
 
 # ==============================================================================
 # PIN VIP — template matching per verifica precondizioni
@@ -311,11 +313,12 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
             else:
                 log("VIP: [PRE-POPUP-F] ANOMALIA: popup_free non visibile — tento dismiss")
 
-            adb.tap(porta, TAP_VIP_DISMISS_FREE)
+            # Chiude la schermata di ricompensa Claim Free: richiede tap esplicito,
+            # non si chiude da sola. TAP_VIP_CHIUDI_REWARD_FREE = (456, 437).
+            adb.tap(porta, TAP_VIP_CHIUDI_REWARD_FREE)
 
-            # [GATE-F] Attende che il popup si chiuda e la maschera VIP torni visibile.
-            # Il popup free è più lento a chiudersi rispetto al popup cassaforte.
-            # Polling su pin_vip_01_store con finestra più ampia (8s invece di 5s).
+            # [GATE-F] Attende che la schermata ricompensa si chiuda e la maschera
+            # VIP torni visibile. Polling su pin_vip_01_store (max 8s).
             gate_f = False
             for _t in range(8):
                 time.sleep(1.0)
@@ -324,8 +327,8 @@ def _esegui_vip(porta: str, nome: str, logger=None) -> bool:
                     log(f"VIP: [GATE-F] pin_vip_01 tornato ({_t+1}s) — maschera VIP OK")
                     break
             if not gate_f:
-                log("VIP: [GATE-F] ANOMALIA: maschera non tornata — retry dismiss")
-                adb.tap(porta, TAP_VIP_DISMISS_FREE)
+                log("VIP: [GATE-F] ANOMALIA: maschera non tornata — retry tap chiudi reward")
+                adb.tap(porta, TAP_VIP_CHIUDI_REWARD_FREE)
                 for _t in range(8):
                     time.sleep(1.0)
                     gate_f, _ = _vip_screen_check(porta, "store", log_fn=None, retry=0)
@@ -484,7 +487,7 @@ def esegui_radar_guarded(porta: str, nome: str, logger=None, coords=None) -> boo
     return ok
 
 
-def esegui_arena_guarded(porta: str, nome: str, logger=None) -> bool:
+def esegui_arena_guarded(porta: str, nome: str, logger=None, coords=None) -> bool:
     """
     Esegue solo il task Arena of Glory se schedulato e abilitato.
     Chiamare da raccolta.py wrappato in _run_guarded("Arena", ...).
@@ -502,7 +505,8 @@ def esegui_arena_guarded(porta: str, nome: str, logger=None) -> bool:
 
     import arena_of_glory as _arena
     adb_exe = getattr(config, "MUMU_ADB", "") or getattr(config, "ADB_EXE", "")
-    res = _arena.run_arena_of_glory(adb_exe=adb_exe, porta=porta)
+    tap_campaign = coords.tap_campaign if coords else None
+    res = _arena.run_arena_of_glory(adb_exe=adb_exe, porta=porta, tap_campaign=tap_campaign)
 
     eseguita = res.get("sfide_eseguite", 0) > 0 or res.get("esaurite", False)
     if eseguita:
@@ -515,7 +519,7 @@ def esegui_arena_guarded(porta: str, nome: str, logger=None) -> bool:
     return res.get("errore") is None
 
 
-def esegui_mercato_arena_guarded(porta: str, nome: str, logger=None) -> bool:
+def esegui_mercato_arena_guarded(porta: str, nome: str, logger=None, coords=None) -> bool:
     """
     Esegue solo il task Mercato Arena se schedulato e abilitato.
     Chiamare da raccolta.py wrappato in _run_guarded("Arena Mercato", ...).
@@ -533,10 +537,12 @@ def esegui_mercato_arena_guarded(porta: str, nome: str, logger=None) -> bool:
 
     import arena_of_glory as _arena
     adb_exe = getattr(config, "MUMU_ADB", "") or getattr(config, "ADB_EXE", "")
+    tap_campaign = coords.tap_campaign if coords else None
     res = _arena.run_mercato_arena(
         adb_exe=adb_exe,
         porta=porta,
         log_fn=lambda m: logger(nome, m) if logger else None,
+        tap_campaign=tap_campaign,
     )
 
     # Registra sempre — anche acquisti=0 significa "visitato, niente da comprare"
@@ -545,3 +551,12 @@ def esegui_mercato_arena_guarded(porta: str, nome: str, logger=None) -> bool:
         + (f" — errore: {res['errore']}" if res.get("errore") else ""))
 
     return res.get("errore") is None
+
+
+def esegui_store_guarded(porta: str, nome: str, logger=None) -> bool:
+    """
+    Esegue il task Store / Mysterious Merchant se schedulato e abilitato.
+    Schedulazione: SCHEDULE_ORE_STORE (default 4h), chiave "store".
+    """
+    import store as _store
+    return _store.esegui_store_guarded(porta=porta, nome=nome, logger=logger)
