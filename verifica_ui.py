@@ -5,6 +5,10 @@
 #  ATTIVAZIONE: config.py → VERIFICA_UI_ABILITATA = True / False
 #  Se False, ogni funzione ritorna True immediatamente (nessun overhead).
 #
+#  v5.24 — Pipeline in-memoria: _screen() usa screenshot_bytes()+decodifica_screenshot()
+#           _match_mem() lavora su cv_img già decodificato — zero I/O disco.
+#           _match() su file mantenuto per backward compat con altri moduli.
+#
 #  TEMPLATE (tutti in C:\Bot-farm\templates\):
 #    pin_region.png        — pulsante toggle HOME  (basso-sx)
 #    pin_shelter.png       — pulsante toggle MAPPA (basso-sx)
@@ -50,22 +54,18 @@ def _tmpl(nome: str):
     return _tmpl_cache[nome]
 
 
-def _match(screen_path: str, template_file: str, roi: tuple) -> float:
+def _match_mem(cv_img, template_file: str, roi: tuple) -> float:
     """
-    Esegue template matching nella ROI data (x1,y1,x2,y2 in 960x540).
-    Scala automaticamente se la risoluzione è diversa.
+    Template matching in-memoria su cv_img già decodificato (pipeline v5.24).
+    ROI (x1,y1,x2,y2) in coordinate 960x540 — scala automaticamente.
     Ritorna score 0-1, oppure -1.0 in caso di errore.
     """
     try:
         tmpl = _tmpl(template_file)
-        if tmpl is None:
+        if tmpl is None or cv_img is None:
             return -1.0
 
-        img = cv2.imread(screen_path)
-        if img is None:
-            return -1.0
-
-        h_img, w_img = img.shape[:2]
+        h_img, w_img = cv_img.shape[:2]
         x1, y1, x2, y2 = roi
         if w_img != 960 or h_img != 540:
             sx = w_img / 960.0
@@ -73,13 +73,25 @@ def _match(screen_path: str, template_file: str, roi: tuple) -> float:
             x1, y1 = int(x1*sx), int(y1*sy)
             x2, y2 = int(x2*sx), int(y2*sy)
 
-        roi_img = img[y1:y2, x1:x2]
+        roi_img = cv_img[y1:y2, x1:x2]
         if roi_img.size == 0:
             return -1.0
 
         res = cv2.matchTemplate(roi_img, tmpl, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, _ = cv2.minMaxLoc(res)
         return float(max_val)
+    except Exception:
+        return -1.0
+
+
+def _match(screen_path: str, template_file: str, roi: tuple) -> float:
+    """
+    Template matching su file — backward compat per moduli che usano screen_path.
+    Internamente carica cv2 e delega a _match_mem().
+    """
+    try:
+        img = cv2.imread(screen_path)
+        return _match_mem(img, template_file, roi)
     except Exception:
         return -1.0
 
@@ -92,10 +104,14 @@ class VerificaUI:
     """
     Verifica visiva template-based per i punti critici del flusso raccolta.
 
+    v5.24 — Pipeline in-memoria: _screen() usa adb.screenshot_bytes() +
+    adb.decodifica_screenshot() e restituisce cv_img. Nessun I/O disco
+    durante le verifiche. _check() riceve cv_img direttamente.
+
     Uso tipico in raccolta.py:
         v = VerificaUI(porta, nome, logger)
 
-        # dopo tap tipo × 2
+        # dopo tap tipo x2
         if not v.tipo_selezionato("campo"):
             log("tipo non selezionato — retry")
 
@@ -120,28 +136,43 @@ class VerificaUI:
         if self._log:
             self._log(self.nome, f"[VERIFICA] {msg}")
 
-    def _screen(self, screen: str = '') -> str:
-        """Usa lo screen fornito, oppure ne scatta uno nuovo."""
-        if screen:
-            return screen
+    def _screen(self, cv_img=None):
+        """
+        Ritorna cv_img pronto per il matching.
+        Se cv_img è già fornito lo usa direttamente (zero screenshot).
+        Altrimenti scatta uno screenshot in-memoria via pipeline v5.24.
+        Fallback su adb.screenshot() se exec-out fallisce.
+        Ritorna None in caso di errore.
+        """
+        if cv_img is not None:
+            return cv_img
         import adb
-        s = adb.screenshot(self.porta) or ''
-        if not s:
-            self._log_msg("screenshot fallito")
-        return s
+        png_bytes = adb.screenshot_bytes(self.porta)
+        if png_bytes:
+            _, cv = adb.decodifica_screenshot(png_bytes)
+            if cv is not None:
+                return cv
+        # Fallback su file
+        path = adb.screenshot(self.porta)
+        if path:
+            img = cv2.imread(path)
+            if img is not None:
+                return img
+        self._log_msg("screenshot fallito")
+        return None
 
-    def _check(self, screen: str, template: str, roi: tuple,
+    def _check(self, cv_img, template: str, roi: tuple,
                soglia: float, descrizione: str,
                default: bool = True) -> bool:
         """Esegue il match e logga il risultato. Fail-safe: ritorna default su errore."""
         if not self._abilitata():
             return True
 
-        s = self._screen(screen)
-        if not s:
+        img = self._screen(cv_img)
+        if img is None:
             return default
 
-        score = _match(s, template, roi)
+        score = _match_mem(img, template, roi)
         if score < 0:
             self._log_msg(f"{descrizione}: template '{template}' non disponibile — skip")
             return default
@@ -155,7 +186,7 @@ class VerificaUI:
 
     # --------------------------------------------------------------------------
     # 1. Tipo nodo selezionato (alone dorato nel pannello lente)
-    #    Chiama dopo tap tipo × 2 in _cerca_nodo()
+    #    Chiama dopo tap tipo x2 in _cerca_nodo()
     # --------------------------------------------------------------------------
     _ROI_LENTE   = (350, 460, 870, 540)
     _SOGLIA_TIPI = 0.85
@@ -166,12 +197,12 @@ class VerificaUI:
         "petrolio": "pin_oil_refinery.png",
     }
 
-    def tipo_selezionato(self, tipo: str, screen: str = '') -> bool:
+    def tipo_selezionato(self, tipo: str, cv_img=None) -> bool:
         """Verifica che l'icona tipo sia evidenziata nel pannello lente."""
         tmpl = self._TIPO_TMPL.get(tipo)
         if not tmpl:
             return True   # tipo sconosciuto — fail-safe
-        return self._check(screen, tmpl, self._ROI_LENTE,
+        return self._check(cv_img, tmpl, self._ROI_LENTE,
                            self._SOGLIA_TIPI, f"tipo '{tipo}' selezionato")
 
     # --------------------------------------------------------------------------
@@ -180,9 +211,9 @@ class VerificaUI:
     # --------------------------------------------------------------------------
     _ROI_GATHER  = (60, 350, 420, 420)
 
-    def gather_visibile(self, screen: str = '') -> bool:
+    def gather_visibile(self, cv_img=None) -> bool:
         """Verifica che il pulsante GATHER sia visibile nel popup nodo."""
-        return self._check(screen, "pin_gather.png", self._ROI_GATHER,
+        return self._check(cv_img, "pin_gather.png", self._ROI_GATHER,
                            0.80, "GATHER visibile")
 
     # --------------------------------------------------------------------------
@@ -191,105 +222,96 @@ class VerificaUI:
     # --------------------------------------------------------------------------
     _ROI_MASCHERA = (400, 460, 870, 540)
 
-    def march_visibile(self, screen: str = '') -> bool:
+    def march_visibile(self, cv_img=None) -> bool:
         """MARCH visibile → squadra configurata, pronta a marciare."""
-        return self._check(screen, "pin_march.png", self._ROI_MASCHERA,
+        return self._check(cv_img, "pin_march.png", self._ROI_MASCHERA,
                            0.80, "MARCH visibile")
 
-    def clear_visibile(self, screen: str = '') -> bool:
+    def clear_visibile(self, cv_img=None) -> bool:
         """CLEAR visibile → squadra configurata (con MARCH)."""
-        return self._check(screen, "pin_clear.png", self._ROI_MASCHERA,
+        return self._check(cv_img, "pin_clear.png", self._ROI_MASCHERA,
                            0.75, "CLEAR visibile")
 
-    def max_visibile(self, screen: str = '') -> bool:
+    def max_visibile(self, cv_img=None) -> bool:
         """MAX visibile → truppe non ancora assegnate."""
-        return self._check(screen, "pin_max.png", self._ROI_MASCHERA,
+        return self._check(cv_img, "pin_max.png", self._ROI_MASCHERA,
                            0.75, "MAX visibile")
 
-    def no_squads_visibile(self, screen: str = '') -> bool:
+    def no_squads_visibile(self, cv_img=None) -> bool:
         """NO SQUADS visibile → nessuna squadra formata."""
-        return self._check(screen, "pin_no_squads.png", self._ROI_MASCHERA,
+        return self._check(cv_img, "pin_no_squads.png", self._ROI_MASCHERA,
                            0.80, "NO SQUADS visibile")
 
-    def create_squad_visibile(self, screen: str = '') -> bool:
+    def create_squad_visibile(self, cv_img=None) -> bool:
         """CREATE SQUAD visibile → nessuna squadra esistente."""
-        return self._check(screen, "pin_create_squad.png", (600, 150, 870, 230),
+        return self._check(cv_img, "pin_create_squad.png", (600, 150, 870, 230),
                            0.80, "CREATE SQUAD visibile")
 
-    def maschera_invio_aperta(self, screen: str = '') -> bool:
+    def maschera_invio_aperta(self, cv_img=None) -> bool:
         """
         Verifica che la maschera invio sia aperta in qualsiasi stato.
+        Scatta uno screenshot unico e lo riusa per tutti i check.
         Ritorna True se almeno uno dei pulsanti attesi è visibile.
         """
         if not self._abilitata():
             return True
 
-        s = self._screen(screen)
-        if not s:
+        img = self._screen(cv_img)
+        if img is None:
             return True   # fail-safe
 
         for fn in (self.march_visibile, self.clear_visibile,
                    self.max_visibile, self.no_squads_visibile,
                    self.create_squad_visibile):
-            if fn(s):
+            if fn(img):
                 return True
 
         self._log_msg("maschera invio NON aperta (nessun pulsante trovato)")
         return False
 
-    def maschera_invio_ancora_aperta(self, screen: str = '') -> bool:
+    def maschera_invio_ancora_aperta(self, cv_img=None) -> bool:
         """
         Come maschera_invio_aperta ma SENZA logging dei singoli check.
-        Usato nel POST-MARCIA dove la maschera chiusa è il comportamento atteso:
-        loggare 'NON trovato' per ogni pin sarebbe rumore inutile.
+        Usato nel POST-MARCIA dove la maschera chiusa è il comportamento atteso.
         Ritorna True solo se la maschera è ancora aperta (= problema).
         """
         if not self._abilitata():
-            return False  # fail-safe inverso: assume chiusa se disabilitato
+            return False  # fail-safe inverso
 
-        s = self._screen(screen)
-        if not s:
+        img = self._screen(cv_img)
+        if img is None:
             return False
 
         for template, roi, soglia in (
-            ("pin_march.png",       self._ROI_MASCHERA, 0.80),
-            ("pin_clear.png",       self._ROI_MASCHERA, 0.75),
-            ("pin_max.png",         self._ROI_MASCHERA, 0.75),
-            ("pin_no_squads.png",   self._ROI_MASCHERA, 0.80),
-            ("pin_create_squad.png",(600, 150, 870, 230), 0.80),
+            ("pin_march.png",        self._ROI_MASCHERA,    0.80),
+            ("pin_clear.png",        self._ROI_MASCHERA,    0.75),
+            ("pin_max.png",          self._ROI_MASCHERA,    0.75),
+            ("pin_no_squads.png",    self._ROI_MASCHERA,    0.80),
+            ("pin_create_squad.png", (600, 150, 870, 230),  0.80),
         ):
-            score = _match(s, template, roi)
+            score = _match_mem(img, template, roi)
             if score >= soglia:
-                return True  # maschera ancora aperta — problema
+                return True  # maschera ancora aperta
         return False  # maschera chiusa — comportamento atteso
 
     # --------------------------------------------------------------------------
     # 4. Popup coordinate aperto — header "Enter coordinates" visibile
-    #    Chiama dopo tap TAP_LENTE_COORD in _leggi_coord_nodo()
-    #    Soglia validata: match=0.995, cross max=0.494 → soglia=0.75
     # --------------------------------------------------------------------------
     _ROI_COORD = (300, 85, 700, 125)
 
-    def enter_coordinates_visibile(self, screen: str = '') -> bool:
+    def enter_coordinates_visibile(self, cv_img=None) -> bool:
         """Verifica che il popup 'Enter coordinates' sia aperto."""
-        return self._check(screen, "pin_enter.png", self._ROI_COORD,
+        return self._check(cv_img, "pin_enter.png", self._ROI_COORD,
                            0.75, "Enter coordinates visibile")
 
     # --------------------------------------------------------------------------
-    # 5. Lente di ricerca visibile in mappa (pannello lente NON ancora aperto)
-    #    Precondizione per tap LENTE in _cerca_nodo().
-    #    Posizione: basso-sinistra (17,320)→(42,353) su 960x540.
-    #    Soglia validata: match=0.997  cross_max=0.368  soglia=0.80
+    # 5. Lente di ricerca visibile in mappa
     # --------------------------------------------------------------------------
     _ROI_LENTE_ICONA = (0, 305, 80, 370)
 
-    def lente_visibile(self, screen: str = '') -> bool:
-        """Verifica che l'icona lente di ricerca sia visibile in mappa.
-
-        Precondizione per il tap LENTE in _cerca_nodo().
-        Se non visibile: siamo in home, overlay, o la lente è coperta.
-        """
-        return self._check(screen, "pin_lente.png", self._ROI_LENTE_ICONA,
+    def lente_visibile(self, cv_img=None) -> bool:
+        """Verifica che l'icona lente di ricerca sia visibile in mappa."""
+        return self._check(cv_img, "pin_lente.png", self._ROI_LENTE_ICONA,
                            0.80, "lente ricerca visibile")
 
     # --------------------------------------------------------------------------
@@ -310,8 +332,8 @@ class VerificaUI:
                 self._log_msg(f"'{descrizione}': retry {i}/{max_retry-1}")
                 adb.tap(self.porta, coord)
             time.sleep(attesa_s)
-            s = self._screen()
-            if fn_check(s):
+            img = self._screen()
+            if fn_check(img):
                 return True
             if i == 0:
                 adb.tap(self.porta, coord)
