@@ -59,8 +59,11 @@ def _default() -> dict:
             "ZAINO_SOGLIA_PETROLIO_M": getattr(config, "ZAINO_SOGLIA_PETROLIO_M",  5.0),
             "ARENA_OF_GLORY_ABILITATO": getattr(config, "ARENA_OF_GLORY_ABILITATO", False),
             "ARENA_MERCATO_ABILITATO":  getattr(config, "ARENA_MERCATO_ABILITATO",  False),
+            "STORE_ABILITATO":          getattr(config, "STORE_ABILITATO",          False),
             "RIFORNIMENTO_ABILITATO": getattr(config, "RIFORNIMENTO_ABILITATO", True),
             "RIFORNIMENTO_MAPPA_ABILITATO": getattr(config, "RIFORNIMENTO_MAPPA_ABILITATO", False),
+            "RIFUGIO_X": getattr(config, "RIFUGIO_X", 684),
+            "RIFUGIO_Y": getattr(config, "RIFUGIO_Y", 532),
             "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO": getattr(config, "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO", 5),
             "RIFORNIMENTO_SOGLIA_CAMPO_M": getattr(config, "RIFORNIMENTO_SOGLIA_CAMPO_M", 5.0),
             "RIFORNIMENTO_SOGLIA_LEGNO_M": getattr(config, "RIFORNIMENTO_SOGLIA_LEGNO_M", 5.0),
@@ -183,10 +186,22 @@ def applica(rt: dict):
         config.ARENA_OF_GLORY_ABILITATO = bool(g["ARENA_OF_GLORY_ABILITATO"])
     if "ARENA_MERCATO_ABILITATO" in g:
         config.ARENA_MERCATO_ABILITATO = bool(g["ARENA_MERCATO_ABILITATO"])
+    if "STORE_ABILITATO" in g:
+        config.STORE_ABILITATO = bool(g["STORE_ABILITATO"])
     if "RIFORNIMENTO_ABILITATO" in g:
         config.RIFORNIMENTO_ABILITATO = bool(g["RIFORNIMENTO_ABILITATO"])
     if "RIFORNIMENTO_MAPPA_ABILITATO" in g:
         config.RIFORNIMENTO_MAPPA_ABILITATO = bool(g["RIFORNIMENTO_MAPPA_ABILITATO"])
+    if "RIFUGIO_X" in g:
+        try:
+            config.RIFUGIO_X = int(g["RIFUGIO_X"])
+        except Exception:
+            pass
+    if "RIFUGIO_Y" in g:
+        try:
+            config.RIFUGIO_Y = int(g["RIFUGIO_Y"])
+        except Exception:
+            pass
     if "RIFORNIMENTO_MAX_SPEDIZIONI_CICLO" in g:
         try:
             v = int(g["RIFORNIMENTO_MAX_SPEDIZIONI_CICLO"])
