@@ -21,6 +21,47 @@ import os as _os
 
 BOT_DIR = _os.path.dirname(_os.path.abspath(__file__))
 
+# ==============================================================================
+# DEBUG — sezione unica per tutti i flag e le cartelle di debug
+#
+#  Struttura su disco (tutte sotto DEBUG_DIR):
+#    debug/
+#      ciclo/ciclo_NNN/{istanza}/   ← screen raccolta per ciclo (debug.py)
+#      stato/                        ← screen rilevamento stato
+#      squadre/                      ← crop contatore squadre + OCR
+#      eta/                          ← crop OCR ETA marcia falliti
+#      screen/                       ← screen_{porta}.png temporanei
+#
+#  Master switch: DEBUG_ABILITATO=False → zero I/O debug su disco.
+#  I flag per-modulo sono ignorati se DEBUG_ABILITATO=False.
+# ==============================================================================
+
+DEBUG_DIR       = _os.path.join(BOT_DIR, "debug")
+DEBUG_ABILITATO = False   # master switch — False = nessun file debug scritto
+
+DEBUG_RACCOLTA  = False   # salva screen fasi raccolta (debug.salva_screen)
+DEBUG_STATO     = False   # salva screen rilevamento stato
+DEBUG_SQUADRE   = False   # salva crop contatore squadre + risultati OCR
+DEBUG_ETA       = False   # salva crop OCR ETA marcia quando fallisce
+
+def _debug_path(*parti) -> str:
+    """Ritorna path assoluto dentro DEBUG_DIR. Crea la cartella se necessario."""
+    path = _os.path.join(DEBUG_DIR, *parti)
+    _os.makedirs(path, exist_ok=True)
+    return path
+
+def _screen_dir() -> str:
+    """Cartella screen temporanei istanza (screen_{porta}.png)."""
+    return _debug_path("screen")
+
+def _debug_modulo(modulo: str) -> str:
+    """Ritorna cartella debug per il modulo dato (stato/squadre/eta/...)."""
+    return _debug_path(modulo)
+
+def _debug_abilitato(flag: bool) -> bool:
+    """Ritorna True solo se DEBUG_ABILITATO=True E il flag specifico=True."""
+    return DEBUG_ABILITATO and flag
+
 def _trova_exe(*candidati):
     for p in candidati:
         if _os.path.isfile(p):
@@ -143,17 +184,17 @@ ISTANZE = [
 # --- MuMuPlayer ---
 ISTANZE_MUMU = [
     {"nome": "FAU_00", "indice": "0", "porta": 16384, "truppe": 0,     "max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_01", "indice": "1", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_02", "indice": "2", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_03", "indice": "3", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_04", "indice": "4", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_05", "indice": "5", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_06", "indice": "6", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_07", "indice": "7", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_08", "indice": "8", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FAU_09", "indice": "9", "porta": 16384, "truppe": 50000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
-    {"nome": "FauMorfeus", "indice": "10", "porta": 16384, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": False},
-    {"nome": "FAU_10", "indice": "11", "porta": 16384, "truppe": 10000,"max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_01", "indice": "1", "porta": 16448, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_02", "indice": "2", "porta": 16480, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_03", "indice": "3", "porta": 16512, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_04", "indice": "4", "porta": 16544, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_05", "indice": "5", "porta": 16576, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_06", "indice": "6", "porta": 16608, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_07", "indice": "7", "porta": 16640, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_08", "indice": "8", "porta": 16672, "truppe": 50000, "max_squadre": 4, "layout": 1, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FAU_09", "indice": "9", "porta": 16704, "truppe": 50000, "max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
+    {"nome": "FauMorfeus", "indice": "10", "porta": 16736, "truppe": 0,"max_squadre": 5, "layout": 1, "lingua": "en", "livello": 7, "profilo": "raccolta_only", "abilitata": True},
+    {"nome": "FAU_10", "indice": "11", "porta": 16768, "truppe": 10000,"max_squadre": 4, "layout": 2, "lingua": "en", "livello": 6, "profilo": "full", "abilitata": True},
 
 ]
 
@@ -182,6 +223,17 @@ def get_coord_alleanza(ist: dict) -> tuple:
     """Ritorna coordinate pulsante Alleanza per l'istanza data."""
     layout = ist.get("layout", 1)
     return COORD_ALLEANZA_LAYOUT.get(layout, COORD_ALLEANZA_LAYOUT[1])
+
+# --- Layout Campaign (barra inferiore, primo pulsante) ---
+ARENA_TAP_CAMPAIGN_LAYOUT = {
+    1: (584, 486),   # standard — 5 icone (Campagna/Zaino/Alleanza/Bestia/Eroe)
+    2: (658, 489),   # compatto — 4 icone (Campagna/Zaino/Alleanza/Eroe) — no Bestia
+}
+
+def get_coord_campaign(ist: dict) -> tuple:
+    """Ritorna coordinate pulsante Campaign per l'istanza data."""
+    layout = ist.get("layout", 1)
+    return ARENA_TAP_CAMPAIGN_LAYOUT.get(layout, ARENA_TAP_CAMPAIGN_LAYOUT[1])
 
 # --- Tap principali ---
 TAP_LENTE             = (38,  325)
@@ -213,7 +265,6 @@ OCR_ZONA = (855, 115, 945, 145)   # crop screenshot per OCR "X/4"
 OCR_MARCIA_ETA_ZONA       = (650, 440, 790, 465)
 OCR_MARCIA_ETA_BASE_W     = 960
 OCR_MARCIA_ETA_BASE_H     = 540
-OCR_MARCIA_ETA_DEBUG_SAVE = False  # True = salva crop falliti in debug_eta/
 OCR_MARCIA_ETA_MARGINE_S  = 5     # secondi extra dopo ETA reale
 OCR_MARCIA_ETA_MIN_S      = 8     # attesa minima anche se ETA molto bassa
 
@@ -246,7 +297,7 @@ ARENA_TAP_CARRELLO        = (905,  68)   # Lista Arena -> icona carrello (apre A
 ARENA_TAP_PRIMO_ACQUISTO  = (235, 283)   # Arena Store -> tap primo acquisto pack
 ARENA_TAP_MAX_ACQUISTO    = (451, 286)   # Arena Store -> tap pulsante max quantità (≤50)
 ARENA_MAX_SFIDE           = 5            # sfide giornaliere massime
-ARENA_SCREEN_TMP          = "screen_arena.png"  # relativo a BOT_DIR
+ARENA_SCREEN_TMP          = "screen_arena.png"  # filename screenshot temporaneo arena (relativo a BOT_DIR)
 # Pixel check popup "Congratulations" — pulsante giallo "Continue"
 ARENA_CONGRATS_CHECK_XY   = (480, 435)
 ARENA_CONGRATS_BGR_LOW    = (10,  130, 170)   # (B, G, R) minimo
@@ -285,7 +336,6 @@ STATO_TOGGLE_LABEL_ZONA = (0, 396, 228, 540)
 STATO_TOGGLE_KEY_HOME = ["REGION", "REGIONE"]
 STATO_TOGGLE_KEY_MAPPA = ["SHELTER", "RIFUGIO"]
 STATO_TOGGLE_OCR_PSM = 7
-STATO_TOGGLE_DEBUG = False
 
 # --- Sistema dual-mode riconoscimento toggle (template matching + OCR fallback) ---
 # TEMPLATE=True  + OCR=True  → template prima, OCR come fallback (consigliato)
@@ -344,6 +394,7 @@ SCHEDULE_ORE_ALLEANZA  = 4    # ore minime tra esecuzioni raccolta alleanza
 SCHEDULE_ORE_VIP       = 24   # ore minime tra esecuzioni ricompense VIP
 SCHEDULE_ORE_RADAR     = 12   # ore minime tra esecuzioni Radar Show
 SCHEDULE_ORE_ZAINO     = 168  # ore minime tra esecuzioni zaino (7 giorni = lunedì)
+SCHEDULE_ORE_STORE     = 4    # ore minime tra esecuzioni acquisto Store (chiave "store")
 
 # --- Arena of Glory ---
 SCHEDULE_ORE_ARENA         = 24   # ore minime tra esecuzioni arena (1 volta al giorno)
@@ -358,6 +409,30 @@ RADAR_CENSUS_ABILITATO = True  # True = salva crop icone radar per training clas
 RADAR_TOOL_THRESHOLD   = 0.65   # soglia template matching radar_tool detector
 ZAINO_ABILITATO        = False   # False = salta scarico zaino settimanale
 ARENA_OF_GLORY_ABILITATO = False  # False = salta Arena of Glory giornaliera
+STORE_ABILITATO          = False  # False = salta acquisto Mysterious Merchant Store
+
+# --- Store / Mysterious Merchant ---
+#
+# Soglie calibrate per pipeline exec-out (adb.screenshot_bytes):
+#   - STORE / STORE_ATTIVO / MERCANTE abbassate a 0.75:
+#     il template pin_store.png è stato catturato con il vecchio metodo
+#     adb pull → il match via exec-out produce uno scarto sistematico di
+#     ~0.03-0.05 punti (FAU_06: best score=0.797 con soglia 0.80 → NON TROVATO).
+#     0.75 copre questa varianza mantenendo discriminazione sufficiente.
+#   - ACQUISTO resta a 0.80: falsi positivi costerebbero acquisti sbagliati.
+#   - BANNER / CARRELLO / MERCHANT / FREE_REFRESH / NO_REFRESH invariati.
+#
+STORE_SOGLIA_STORE        = 0.75   # pin_store.png — edificio store nella mappa       [era 0.80]
+STORE_SOGLIA_BANNER       = 0.85   # pin_banner_aperto/chiuso.png
+STORE_SOGLIA_STORE_ATTIVO = 0.75   # pin_store_attivo.png — label Store dopo tap       [era 0.80]
+STORE_SOGLIA_CARRELLO     = 0.75   # pin_carrello.png
+STORE_SOGLIA_MERCHANT     = 0.75   # pin_merchant.png — merchant aperto
+STORE_SOGLIA_MERCANTE     = 0.75   # pin_mercante.png — icona mercante sull'edificio   [era 0.80]
+STORE_SOGLIA_ACQUISTO     = 0.80   # pin_legno/pomodoro/acciaio — NON abbassare
+STORE_SOGLIA_FREE_REFRESH = 0.80   # pin_free_refresh.png
+STORE_SOGLIA_NO_REFRESH   = 0.80   # pin_no_refresh.png (a pagamento — non tappare)
+STORE_PASSO_SCAN          = 300    # pixel per swipe nella griglia di ricerca
+STORE_MAX_PAGINE          = 3      # pagine max da scorrere nel merchant
 
 # --- Zaino: risorse abilitate ---
 ZAINO_USA_POMODORO     = True    # True = scarica pacchetti pomodoro dallo zaino
@@ -388,6 +463,8 @@ ZAINO_MAX_RIGHE         = 5            # righe visibili senza scroll
 RIFORNIMENTO_MAX_SPEDIZIONI_CICLO = 5  # max spedizioni rifornimento per istanza in un singolo ciclo
 RIFORNIMENTO_ABILITATO         = False
 RIFORNIMENTO_MAPPA_ABILITATO   = False  # True = usa navigazione via coordinate mappa invece di lista Membri
+RIFUGIO_X                      = 702    # coordinata X mappa del rifugio destinatario
+RIFUGIO_Y                      = 533    # coordinata Y mappa del rifugio destinatario
 DOOMS_ACCOUNT                  = "FauMorfeus"
 DOOMS_AVATAR                   = "templates/avatar.png"
 RIFORNIMENTO_BTN_TEMPLATE      = "templates/btn_risorse_approv.png"       # IT
