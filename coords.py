@@ -35,7 +35,8 @@ class UICoords:
     """
 
     # --- Barra inferiore (layout-dipendente) ---
-    alleanza:  Coord   # pulsante Alleanza in home/mappa
+    alleanza:     Coord   # pulsante Alleanza in home/mappa
+    tap_campaign: Coord   # pulsante Campaign in home/mappa (layout-dipendente)
 
     # --- Mappa: ricerca nodi ---
     lente:               Coord
@@ -89,7 +90,8 @@ class UICoords:
         Costruisce UICoords dall'elemento ISTANZE/ISTANZE_MUMU (dizionario).
         ist: {"nome": ..., "interno"/"indice": ..., "porta": ..., "layout": ..., ...}
         """
-        alleanza = config.get_coord_alleanza(ist)
+        alleanza    = config.get_coord_alleanza(ist)
+        tap_campaign = config.get_coord_campaign(ist)
 
         tap_campo        = config.TAP_CAMPO
         tap_segheria     = config.TAP_SEGHERIA
@@ -109,6 +111,7 @@ class UICoords:
 
         return cls(
             alleanza          = alleanza,
+            tap_campaign      = tap_campaign,
             lente             = config.TAP_LENTE,
             lente_coord       = config.TAP_LENTE_COORD,
             tap_campo         = tap_campo,
