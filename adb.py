@@ -1,23 +1,50 @@
 # ==============================================================================
 #  DOOMSDAY BOT V5 - adb.py
-#  Motore ADB - tutti i comandi verso le istanze BlueStacks
+#  Motore ADB - tutti i comandi verso le istanze MuMuPlayer
+#
+#  v5.24 — Aggiunta pipeline screenshot in-memoria (exec-out)
+#          per eliminare I/O disco nel rilevamento stato.
+#          Funzioni originali (screenshot, leggi_pixel, crop_zona) intatte
+#          per backward compatibility con arena, messaggi, raccolta, ecc.
+#  v5.25 — Lock screencap da globale a per-porta: istanze su porte diverse
+#          girano in parallelo senza bloccarsi a vicenda.
 # ==============================================================================
 
 import subprocess
 import os
 import time
 import threading
+from io import BytesIO
 from PIL import Image
 import config
 
 # ------------------------------------------------------------------------------
-# Lock screencap — serializza solo l'operazione screenshot tra thread paralleli.
-# Evita frame corrotti quando due istanze fanno screencap simultaneamente.
-# Timeout di sicurezza: se un thread non rilascia entro 30s (crash), il lock
-# viene forzatamente sbloccato per non paralizzare le altre istanze.
+# Lock screencap — un lock PER PORTA invece di uno globale.
+#
+# Motivazione: due istanze MuMu su porte diverse (16384, 16394, ...) sono
+# processi Android completamente separati — non si contendono nulla a livello
+# di device. Il lock globale serializzava inutilmente tutte le istanze parallele
+# rendendo il guadagno del parallelismo quasi nullo.
+#
+# Il lock per-porta garantisce ancora che due thread non facciano screencap
+# simultaneamente SULLA STESSA PORTA (caso raro ma possibile se un modulo
+# chiama screenshot() mentre stato.py chiama screenshot_bytes() sulla stessa
+# istanza nello stesso istante).
+#
+# Timeout di sicurezza: 30s — se un thread non rilascia entro questo tempo
+# (crash), il lock viene forzatamente ignorato per non paralizzare le altre.
 # ------------------------------------------------------------------------------
-_screencap_lock    = threading.Lock()
-_SCREENCAP_TIMEOUT = 30  # secondi massimi di attesa per acquisire il lock
+_screencap_locks      = {}                # porta -> threading.Lock()
+_screencap_locks_meta = threading.Lock() # protegge il dict durante creazione
+_SCREENCAP_TIMEOUT    = 30               # secondi massimi di attesa per il lock
+
+
+def _get_screencap_lock(porta: str) -> threading.Lock:
+    """Ritorna il lock dedicato alla porta specificata (lazy, thread-safe)."""
+    with _screencap_locks_meta:
+        if porta not in _screencap_locks:
+            _screencap_locks[porta] = threading.Lock()
+        return _screencap_locks[porta]
 
 # ------------------------------------------------------------------------------
 # Esegui comando ADB generico
@@ -96,21 +123,23 @@ def keyevent(porta: str, keycode: str):
 
 # ------------------------------------------------------------------------------
 # Screenshot via ADB -> salva in BOT_DIR e restituisce path
+# (ORIGINALE — usato da arena_of_glory, messaggi, raccolta, verifica_ui, ecc.)
 # ------------------------------------------------------------------------------
 def screenshot(porta: str) -> str:
     """
     Scatta screenshot dell'istanza e lo salva localmente. Ritorna il path.
-    Serializzato con lock per evitare frame corrotti con istanze parallele.
+    Serializzato con lock PER PORTA per evitare frame corrotti sulla stessa
+    istanza. Istanze diverse su porte diverse non si bloccano a vicenda.
     Timeout di 30s per evitare deadlock in caso di crash di un thread.
     """
     remote_path = f"/sdcard/ahk_screen_{porta}.png"
-    local_path  = os.path.join(config.BOT_DIR, f"screen_{porta}.png")
+    screen_dir  = os.path.join(config.DEBUG_DIR, "screen")
+    os.makedirs(screen_dir, exist_ok=True)
+    local_path  = os.path.join(screen_dir, f"screen_{porta}.png")
 
-    acquired = _screencap_lock.acquire(timeout=_SCREENCAP_TIMEOUT)
+    lock     = _get_screencap_lock(porta)
+    acquired = lock.acquire(timeout=_SCREENCAP_TIMEOUT)
     if not acquired:
-        # Timeout: il lock non è stato rilasciato entro 30s.
-        # Procedi comunque — meglio un frame potenzialmente corrotto
-        # che bloccare l'istanza indefinitamente.
         print(f"[ADB] WARN screenshot({porta}): lock timeout {_SCREENCAP_TIMEOUT}s — procedo senza lock")
         acquired = False
 
@@ -125,11 +154,12 @@ def screenshot(porta: str) -> str:
         return ""
     finally:
         if acquired:
-            _screencap_lock.release()
+            lock.release()
 
 # ------------------------------------------------------------------------------
-# Leggi pixel da screenshot
+# Leggi pixel da screenshot (file su disco)
 # Ritorna (r, g, b) oppure (-1, -1, -1) se fallisce
+# (ORIGINALE — usato da altri moduli che passano screen_path)
 # ------------------------------------------------------------------------------
 def leggi_pixel(screen_path: str, x: int, y: int) -> tuple:
     """Legge il colore di un pixel da uno screenshot salvato."""
@@ -138,6 +168,24 @@ def leggi_pixel(screen_path: str, x: int, y: int) -> tuple:
         r, g, b = img.getpixel((x, y))[:3]
         return (r, g, b)
     except:
+        return (-1, -1, -1)
+
+# ------------------------------------------------------------------------------
+# Leggi pixel da immagine PIL già in memoria
+# (NUOVA — usata da stato.py per il rilevamento in-memoria)
+# ------------------------------------------------------------------------------
+def leggi_pixel_img(pil_img, x: int, y: int) -> tuple:
+    """
+    Legge pixel da un'immagine PIL già in memoria.
+    Stessa interfaccia di leggi_pixel() ma senza I/O disco.
+    Ritorna (r, g, b) oppure (-1, -1, -1).
+    """
+    if pil_img is None:
+        return (-1, -1, -1)
+    try:
+        r, g, b = pil_img.getpixel((x, y))[:3]
+        return (r, g, b)
+    except Exception:
         return (-1, -1, -1)
 
 # ------------------------------------------------------------------------------
@@ -151,6 +199,120 @@ def crop_zona(screen_path: str, zona: tuple) -> Image.Image | None:
     except:
         return None
 
+# ==============================================================================
+# PIPELINE SCREENSHOT IN-MEMORIA (exec-out)
+#
+# Usata da stato.py per il rilevamento stato — il modulo chiamato più spesso.
+# Elimina: file su device, adb pull, doppio load (PIL + cv2).
+# Risparmio stimato: 150-300ms per chiamata.
+#
+# Se exec-out non funziona (MuMu vecchio, ADB incompatibile), il chiamante
+# cade automaticamente su screenshot() tradizionale.
+# ==============================================================================
+
+def screenshot_bytes(porta: str) -> bytes:
+    """
+    Screenshot via exec-out — nessun file su device, nessun pull.
+    Ritorna i bytes PNG grezzi, oppure b'' se fallisce.
+
+    Lock PER PORTA: istanze su porte diverse girano completamente in parallelo.
+    Solo due chiamate sulla stessa porta si serializzano (caso raro).
+
+    VANTAGGI rispetto a screenshot():
+      - Elimina write su /sdcard/ del device    (~50ms)
+      - Elimina adb pull                        (~100-200ms)
+      - Elimina write su disco locale           (~10ms)
+    """
+    lock     = _get_screencap_lock(porta)
+    acquired = lock.acquire(timeout=_SCREENCAP_TIMEOUT)
+    if not acquired:
+        print(f"[ADB] WARN screenshot_bytes({porta}): lock timeout — procedo senza lock")
+        acquired = False
+
+    try:
+        cmd = [
+            config.ADB_EXE, "-s", f"127.0.0.1:{porta}",
+            "exec-out", "screencap", "-p"
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
+
+        if result.returncode != 0 or not result.stdout:
+            return b''
+
+        # Sanity check: un PNG valido inizia con \x89PNG
+        if len(result.stdout) < 100 or result.stdout[:4] != b'\x89PNG':
+            return b''
+
+        return result.stdout
+
+    except subprocess.TimeoutExpired:
+        return b''
+    except Exception:
+        return b''
+    finally:
+        if acquired:
+            lock.release()
+
+
+def decodifica_screenshot(png_bytes: bytes):
+    """
+    Decodifica PNG bytes in (pil_img, cv_img) — un solo decode per entrambi.
+    Ritorna (None, None) se fallisce.
+
+    pil_img : PIL.Image — per pixel check
+    cv_img  : numpy ndarray BGR — per template matching (None se cv2 assente)
+    """
+    if not png_bytes:
+        return (None, None)
+
+    # PIL Image (per pixel check)
+    try:
+        pil_img = Image.open(BytesIO(png_bytes))
+        pil_img.load()  # forza decode completo (PIL è lazy)
+    except Exception:
+        return (None, None)
+
+    # cv2 Image (per template matching)
+    cv_img = None
+    try:
+        import numpy as np
+        import cv2
+        arr = np.frombuffer(png_bytes, dtype=np.uint8)
+        cv_img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except ImportError:
+        pass  # cv2 non disponibile — stato.py userà fallback pixel check
+    except Exception:
+        pass
+
+    return (pil_img, cv_img)
+
+
+def salva_screenshot(png_bytes: bytes, porta: str) -> str:
+    """
+    Salva i PNG bytes su disco in debug/screen/screen_{porta}.png.
+    Ritorna il path locale, oppure '' se fallisce.
+
+    Chiamare SOLO quando serve il file su disco — per il rilevamento stato
+    in-memoria non è necessario.
+    Il file viene sovrascritto ad ogni chiamata — non si accumula su disco.
+    """
+    if not png_bytes:
+        return ''
+
+    screen_dir = os.path.join(config.DEBUG_DIR, "screen")
+    os.makedirs(screen_dir, exist_ok=True)
+    local_path = os.path.join(screen_dir, f"screen_{porta}.png")
+    try:
+        with open(local_path, 'wb') as f:
+            f.write(png_bytes)
+        return local_path
+    except Exception:
+        return ''
+
+# ==============================================================================
+# FINE PIPELINE IN-MEMORIA
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
 # Avvia gioco con retry e verifica
 # ------------------------------------------------------------------------------
@@ -159,7 +321,6 @@ def avvia_gioco(porta: str, tentativi: int = 5, attesa: int = 10) -> bool:
     for i in range(tentativi):
         ris = adb_shell(porta, f"am start -n {config.GAME_ACTIVITY}")
         if "Error" not in ris:
-            # Verifica che il processo gioco sia attivo
             time.sleep(3)
             procs = adb_shell(porta, "pidof com.igg.android.doomsdaylastsurvivors")
             if procs.strip():
