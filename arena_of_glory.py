@@ -196,9 +196,10 @@ def _gestisci_tutti_popup(adb_exe, porta, log_fn=None):
     _gestisci_popup_glory(adb_exe, porta, log_fn)
     _gestisci_popup_congratulations(adb_exe, porta, log_fn)
 
-def _naviga_a_arena(adb_exe, porta, log_fn=None):
+def _naviga_a_arena(adb_exe, porta, log_fn=None, tap_campaign=None):
+    _tap_camp = tap_campaign or TAP_CAMPAIGN
     if log_fn: log_fn("[ARENA] HOME → Campaign")
-    _tap(adb_exe, porta, TAP_CAMPAIGN, "Campaign", log_fn)
+    _tap(adb_exe, porta, _tap_camp, "Campaign", log_fn)
     time.sleep(3.0)
     if log_fn: log_fn("[ARENA] Campaign → Arena of Doom")
     _tap(adb_exe, porta, TAP_ARENA_OF_DOOM, "Arena of Doom", log_fn)
@@ -462,7 +463,7 @@ def _visita_mercato_arena(adb_exe: str, porta: str, log_fn=None) -> int:
     return acquisti
 
 
-def run_mercato_arena(adb_exe, porta, log_fn=None) -> dict:
+def run_mercato_arena(adb_exe, porta, log_fn=None, tap_campaign=None) -> dict:
     """
     Entry point mercato Arena — chiamabile da daily_tasks.py.
     Schedulazione: SCHEDULE_ORE_ARENA_MERCATO (default 4h), chiave "arena_mercato".
@@ -486,7 +487,7 @@ def run_mercato_arena(adb_exe, porta, log_fn=None) -> dict:
         log(f"[MERCATO-ARENA] {risultato['errore']}")
         return risultato
 
-    if not _naviga_a_arena(adb_exe, porta, log):
+    if not _naviga_a_arena(adb_exe, porta, log, tap_campaign=tap_campaign):
         risultato["errore"] = "impossibile raggiungere lista arena"
         log(f"[MERCATO-ARENA] {risultato['errore']}")
         _torna_home(adb_exe, porta, log)
@@ -504,7 +505,7 @@ def run_mercato_arena(adb_exe, porta, log_fn=None) -> dict:
     return risultato
 
 
-def run_arena_of_glory(adb_exe, porta, log_fn=None):
+def run_arena_of_glory(adb_exe, porta, log_fn=None, tap_campaign=None):
     """
     Entry point — chiamabile dal bot (daily_tasks.py).
     Firma retrocompatibile: run_arena_of_glory(adb_exe, porta, log_fn=None)
@@ -538,7 +539,7 @@ def run_arena_of_glory(adb_exe, porta, log_fn=None):
             continue
 
         # STEP 2: naviga verso Arena of Glory
-        if not _naviga_a_arena(adb_exe, porta, log):
+        if not _naviga_a_arena(adb_exe, porta, log, tap_campaign=tap_campaign):
             log(f"[ARENA] [PRE-LISTA] lista non raggiunta — torna home + prossimo tentativo")
             _torna_home(adb_exe, porta, log)
             continue
