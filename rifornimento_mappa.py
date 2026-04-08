@@ -17,7 +17,7 @@
 #    Fallback HOME solo in caso di errore
 #
 #  Flag abilitazione: RIFORNIMENTO_MAPPA_ABILITATO in config.py / runtime.json
-#  Coordinate rifugio: RIFUGIO_X, RIFUGIO_Y (hardcoded — TODO: esternalizzare)
+#  Coordinate rifugio: RIFUGIO_X, RIFUGIO_Y in config.py / runtime.json (modificabili dalla dashboard)
 # ==============================================================================
 
 import time
@@ -43,9 +43,9 @@ from rifornimento import (
     QTA_DEFAULT,
 )
 
-# ── Coordinate rifugio destinatario (hardcoded — TODO: esternalizzare) ─────────
-RIFUGIO_X = 684
-RIFUGIO_Y = 532
+# ── Coordinate rifugio destinatario (da config.py / runtime.json) ──────────────
+RIFUGIO_X = getattr(config, "RIFUGIO_X", 684)
+RIFUGIO_Y = getattr(config, "RIFUGIO_Y", 532)
 
 # ── Coordinate UI 960x540 — navigazione mappa ──────────────────────────────────
 TAP_LENTE_MAPPA     = (334,  13)   # lente coordinate sulla mappa
@@ -83,8 +83,8 @@ def _centra_e_apri_maschera(porta: str, logger=None, nome: str = "",
     def log(msg):
         if logger: logger(nome, f"[RIFMAP] {msg}")
 
-    rx = x if x is not None else RIFUGIO_X
-    ry = y if y is not None else RIFUGIO_Y
+    rx = x if x is not None else getattr(config, "RIFUGIO_X", RIFUGIO_X)
+    ry = y if y is not None else getattr(config, "RIFUGIO_Y", RIFUGIO_Y)
 
     # 1. Centra mappa sul rifugio
     log(f"Centratura mappa su rifugio X:{rx} Y:{ry}")
