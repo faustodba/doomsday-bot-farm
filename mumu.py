@@ -126,6 +126,35 @@ def avvia_istanza(ist: dict, logger=None) -> bool:
     def log(msg):
         if logger: logger(nome, msg)
 
+    # --- Pre-avvio: killa eventuale processo zombie dall'istanza precedente ---
+    # Se il ciclo precedente non ha chiuso correttamente l'istanza (crash, kill
+    # del bot, riavvio manuale), il processo MuMu rimane in memoria e blocca
+    # il popup di caricamento al ciclo successivo perché il gioco è già avviato
+    # ma in uno stato non standard (né home né mappa).
+    pid_zombie = _get_pid_istanza_mumu(indice)
+    if pid_zombie:
+        log(f"[ZOMBIE] PID={pid_zombie} preesistente su index={indice} — shutdown + kill preventivo")
+        try:
+            subprocess.run(
+                [config.MUMU_MANAGER, "control", "-v", str(indice), "shutdown"],
+                capture_output=True, timeout=10
+            )
+            time.sleep(1)
+        except Exception:
+            pass
+        if _pid_attivo(pid_zombie):
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid_zombie)],
+                    capture_output=True, timeout=10
+                )
+                time.sleep(1)
+                log(f"[ZOMBIE] PID={pid_zombie} terminato")
+            except Exception as e:
+                log(f"[ZOMBIE] Errore kill PID={pid_zombie}: {e}")
+        else:
+            log(f"[ZOMBIE] PID={pid_zombie} già terminato dopo shutdown")
+
     log(f"Avvio MuMuPlayer index={indice} ({nome})...")
     try:
         result = subprocess.run(
