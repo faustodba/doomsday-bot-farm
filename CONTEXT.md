@@ -278,3 +278,67 @@ Tutti i task schedulati seguono lo stesso schema:
 2. **`emulatore_base.py`** — full traceback nel log errore
 3. **Radar Census** — dataset FAU_06..FAU_09 + Random Forest classifier
 4. **`rifornimento_mappa.py`** — coordinate rifugio da esternalizzare in JSON per istanza
+
+---
+
+## 2026-04-08 — V5.25 WIP
+
+### store.py (nuovo modulo)
+- Task periodico ogni 4h, chiave `"store"`, flag `STORE_ABILITATO=False`
+- Scan spirale 5×5 (25 posizioni, passo 300px): `GRIGLIA` lista delta (dx,dy)
+- Gestione banner: `_comprimi_banner()` / `_ripristina_banner()` via `pin_banner_aperto/chiuso.png`
+- Ricerca edificio: `_match(cv_img, "pin_store.png", roi=roi_corrente)` — ROI dipende da banner aperto/chiuso
+- Mercante diretto: check `pin_mercante.png` pre-tap → se visibile skip carrello
+- Flusso negozio: `_gestisci_negozio()` → label → carrello → merchant → acquista × 3 pagine → refresh → secondo ciclo
+- Acquisto: `_acquista_pagina()` → `_conta_pulsanti()` → NMS su pin_legno/pomodoro/acciaio → tap tutti → verifica rimasti
+- Integrato in `raccolta._esegui_task_periodici()` come primo task
+- Integrato in `daily_tasks.esegui_store_guarded()` con pattern scheduler standard
+
+#### Bug fix critico — `store._screenshot()` (v5.25.1)
+- **Prima**: `raw = adb.screenshot(porta)` → ritorna path stringa → `decodifica_screenshot(str)` crash silenzioso → `(None, None)` × 25 → `best score=-1.000`
+- **Dopo**: `raw = adb.screenshot_bytes(porta)` → bytes PNG → pipeline corretta
+- `adb.screenshot()` → ritorna **path stringa** (backward compat) — MAI usare con `decodifica_screenshot`
+- `adb.screenshot_bytes()` → ritorna **bytes PNG** — SEMPRE usare nei nuovi moduli
+
+#### Bug fix soglie — exec-out vs adb pull (v5.25.2)
+- Template catturati con adb pull → exec-out produce scarto sistematico ~0.03-0.05
+- FAU_06 best score=0.797 con soglia 0.80 → store NON TROVATO
+- `STORE_SOGLIA_STORE=0.75`, `STORE_SOGLIA_STORE_ATTIVO=0.75`, `STORE_SOGLIA_MERCANTE=0.75`
+- `STORE_SOGLIA_ACQUISTO=0.80` invariato — falso positivo = acquisto sbagliato
+- Dopo rinnovo template con exec-out riportare soglie a 0.80
+
+### rifornimento.py — fix `_slot_liberi`
+- **Prima**: `conta_squadre(porta, n_letture=3)` senza `n_squadre` → OCR legge "4/4" su istanza 5 slot → `libere=4-4=0`
+- **Causa**: il gioco mostra X/Y dove Y = slot raccolta configurati per istanza, non totale assoluto
+- **Dopo**: lookup `ISTANZE_MUMU` per porta → `n_squadre=ist.get("max_squadre")` → passato a `conta_squadre`
+- Fallback: porta non trovata → `n_squadre=-1` (comportamento precedente, non blocca)
+
+### config.py
+- Sezione `# --- Store / Mysterious Merchant ---` aggiunta (10 costanti)
+- `STORE_ABILITATO=False`, `SCHEDULE_ORE_STORE=4`
+- Soglie calibrate exec-out: STORE=0.75, STORE_ATTIVO=0.75, MERCANTE=0.75, ACQUISTO=0.80
+- Commento calibrazione con motivazione e condizione per riportare a 0.80
+
+### test_boost_detection.py (nuovo — test standalone)
+- Pattern identico a `test_store_detection.py`
+- Step 1: tap `(142,47)` → verifica `pin_manage.png`
+- Step 2-3: scroll max 8 → cerca `pin_speed.png`; stessa screenshot → check `pin_50_.png`
+- Step 4: boost attivo → BACK×3 → exit
+- Step 5: tap coordinate trovate da match `pin_speed`
+- Step 6: `pin_speed_8h` + `pin_speed_use` → tap USE
+- Step 7: fallback `pin_speed_1d` + `pin_speed_use` → tap USE
+- Step 8: nessun boost disponibile → BACK×3 → exit
+- Soglie iniziali tutte 0.75 — calibrare dopo primo test reale
+
+### Nuovi template (tutti in `templates/`)
+- Store (10): `pin_store`, `pin_store_attivo`, `pin_carrello`, `pin_merchant`, `pin_mercante`, `pin_legno`, `pin_pomodoro`, `pin_no_refresh`, `pin_free_refresh`, `pin_soldout`
+- Banner (2): `pin_banner_aperto`, `pin_banner_chiuso`
+- Boost (7): `pin_boost`, `pin_manage`, `pin_speed`, `pin_50_`, `pin_speed_8h`, `pin_speed_1d`, `pin_speed_use`
+- Raccolta (1): `pin_frecce`
+
+### ⚠️ PENDING
+1. `boost.py` — modulo integrato nel bot (test standalone completato)
+2. `allocation.py` — mapping campo→pomodoro
+3. `emulatore_base.py` — full traceback log
+4. Radar Census — dataset FAU_06..FAU_09 + Random Forest
+5. Rinnovo template store con exec-out → soglie tornano a 0.80
