@@ -581,8 +581,30 @@ def _cerca_avatar_scroll(porta: str, template_path: str, logger=None, nome: str 
 # Leggi slot liberi raccoglitori da home
 # ------------------------------------------------------------------------------
 def _slot_liberi(porta: str) -> int:
-    """Legge contatore raccoglitori in home. Ritorna slot liberi (0-4)."""
-    attive, totale, libere = stato.conta_squadre(porta, n_letture=3)
+    """
+    Legge contatore raccoglitori. Ritorna slot liberi.
+
+    Passa n_squadre da config (max_squadre dell'istanza) a conta_squadre
+    per garantire che il totale sia noto a priori anche quando l'OCR legge
+    "4/4" su un'istanza con 5 slot (es. istanza con max_squadre=5 che ha
+    4 raccoglitori attivi: senza n_squadre conta 4-4=0 invece di 5-4=1).
+
+    Lookup: scorre ISTANZE_MUMU cercando la porta corrispondente.
+    Se non trovata usa -1 (OCR legge totale dal testo, meno affidabile).
+    """
+    n_squadre = -1
+    try:
+        porta_int = int(porta)
+        for ist in getattr(config, "ISTANZE_MUMU", []):
+            if int(ist.get("porta", -1)) == porta_int:
+                ms = ist.get("max_squadre", -1)
+                if ms and ms > 0:
+                    n_squadre = int(ms)
+                break
+    except Exception:
+        pass
+
+    attive, totale, libere = stato.conta_squadre(porta, n_letture=3, n_squadre=n_squadre)
     if attive == -1 or totale == -1:
         return 4  # fallback ottimistico
     return libere
