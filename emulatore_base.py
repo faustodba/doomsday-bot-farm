@@ -69,6 +69,47 @@ def attendi_e_raccogli_istanza(ist: list, fn_raccolta, risultati: dict,
     log(f"[TIMING] Attesa minima: {ATTESA_MINIMA_CARICA}s | Stima storica: {attesa_stimata}s → polling dal secondo {ATTESA_MINIMA_CARICA}")
     time.sleep(ATTESA_MINIMA_CARICA)
 
+    # --- Fase 1b: check stato gioco dopo attesa minima ---
+    # Se il gioco è già in home/mappa (es. PID rimasto dal ciclo precedente,
+    # o MuMu ha rilanciato il gioco senza mostrare il popup di caricamento),
+    # saltiamo completamente il polling del popup ed avviamo la raccolta.
+    # Se lo stato è sconosciuto/overlay (zombie in stato anomalo), inviamo
+    # alcuni BACK per tentare di riportarlo in home prima del polling.
+    import stato as _stato
+    s_pre, _ = _stato.rileva(porta)
+    if s_pre not in ('home', 'mappa'):
+        # Stato anomalo: potrebbe essere un gioco zombie bloccato su un banner.
+        # Proviamo BACK rapidi per uscire da eventuali overlay residui.
+        if s_pre in ('overlay', 'sconosciuto'):
+            log(f"Stato iniziale '{s_pre}' — invio BACK di pulizia preventiva")
+            for _ in range(5):
+                adb.keyevent(porta, "KEYCODE_BACK")
+                time.sleep(0.5)
+            time.sleep(1.0)
+            s_pre, _ = _stato.rileva(porta)
+            log(f"Stato dopo BACK preventivi: '{s_pre}'")
+
+    if s_pre in ('home', 'mappa'):
+        log(f"Gioco già in stato '{s_pre}' dopo attesa minima — skip polling popup")
+        try: _status.istanza_gioco_pronto(nome)
+        except Exception: pass
+        t_totale = ATTESA_MINIMA_CARICA
+        timing.registra(nome, t_totale, logger)
+        try:
+            inviate = fn_raccolta(ist)
+            log(f"Completata - {inviate} squadre inviate")
+            risultati[nome] = inviate
+            try: _status.istanza_completata(nome, inviate)
+            except Exception: pass
+        except Exception as e:
+            log(f"ERRORE raccolta: {e}")
+            risultati[nome] = -1
+            try: _status.istanza_errore(nome, "errore")
+            except Exception: pass
+        fn_chiudi(ist, logger)
+        if on_completata: on_completata()
+        return
+
     # --- Fase 2: polling popup ---
     conferme             = 0
     CONFERME_RICHIESTE   = 3
