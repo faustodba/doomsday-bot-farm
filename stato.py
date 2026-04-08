@@ -1,12 +1,16 @@
-# ============================================================================== 
+# ==============================================================================
 # DOOMSDAY BOT V5 - stato.py
 # Rilevamento stato istanza: home / mappa / overlay / sconosciuto
+#
+# v5.24 — Pipeline in-memoria: rileva() usa exec-out + decode unico.
+#         Funzioni originali (rileva_screen, _match_toggle_template, ecc.)
+#         intatte per backward compatibility.
 #
 # POTENZIAMENTO:
 # - Secondo sensore basato sul bottone toggle basso-sinistra (OCR Region/Shelter).
 # - Log diagnostico opzionale quando il sensore toggle override la decisione base.
 # - Contatore override PER ISTANZA (nome+porta) thread-safe.
-# ============================================================================== 
+# ==============================================================================
 
 import os
 import time
@@ -74,7 +78,8 @@ _tmpl_shelter_cv = None
 
 
 def _carica_toggle_templates() -> bool:
-    """Carica pin_region.png e pin_shelter.png in memoria. Ritorna True se ok."""
+    """Carica pin_region.png e pin_shelter.png in memoria.
+    Ritorna True se ok."""
     global _tmpl_region_cv, _tmpl_shelter_cv
     try:
         import cv2
@@ -94,6 +99,8 @@ def _carica_toggle_templates() -> bool:
     except Exception:
         return False
 
+
+# --- Template matching su file (ORIGINALE — backward compat) ---
 
 def _match_toggle_template(screen_path: str) -> tuple:
     """
@@ -129,8 +136,50 @@ def _match_toggle_template(screen_path: str) -> tuple:
         return ('home',  f'region={sr:.3f}')
     if ss >= soglia and ss > sr:
         return ('mappa', f'shelter={ss:.3f}')
-    # Sotto soglia: template non trovati → icona toggle non visibile → overlay
-    # Usiamo 'overlay' come stato per distinguere da errore tecnico ('')
+    return ('overlay', f'sotto soglia: region={sr:.3f} shelter={ss:.3f}')
+
+
+# --- Template matching IN MEMORIA (NUOVA — usata da rileva()) ---
+
+def _match_toggle_template_mem(cv_img) -> tuple:
+    """
+    Come _match_toggle_template() ma riceve l'immagine cv2 già decodificata.
+    Elimina cv2.imread() — il costo maggiore dopo lo screencap.
+    Ritorna (stato, descrizione) oppure ('', msg_errore).
+    """
+    import cv2
+
+    if cv_img is None:
+        return ('', 'cv_img None')
+
+    soglia = getattr(config, 'STATO_TOGGLE_TEMPLATE_SOGLIA', 0.80)
+    x1, y1, x2, y2 = getattr(config, 'STATO_TOGGLE_ROI', (0, 450, 120, 540))
+
+    if not _carica_toggle_templates():
+        return ('', 'template non caricati')
+
+    h_img, w_img = cv_img.shape[:2]
+    if w_img != 960 or h_img != 540:
+        sx = w_img / 960.0
+        sy = h_img / 540.0
+        x1, y1 = int(x1 * sx), int(y1 * sy)
+        x2, y2 = int(x2 * sx), int(y2 * sy)
+
+    roi = cv_img[y1:y2, x1:x2]
+    if roi.size == 0:
+        return ('', 'ROI vuota')
+
+    _, sr, _, _ = cv2.minMaxLoc(
+        cv2.matchTemplate(roi, _tmpl_region_cv, cv2.TM_CCOEFF_NORMED)
+    )
+    _, ss, _, _ = cv2.minMaxLoc(
+        cv2.matchTemplate(roi, _tmpl_shelter_cv, cv2.TM_CCOEFF_NORMED)
+    )
+
+    if sr >= soglia and sr >= ss:
+        return ('home', f'region={sr:.3f}')
+    if ss >= soglia and ss > sr:
+        return ('mappa', f'shelter={ss:.3f}')
     return ('overlay', f'sotto soglia: region={sr:.3f} shelter={ss:.3f}')
 
 
@@ -172,6 +221,8 @@ def _ocr_testo_toggle(screen_path: str) -> str:
         return ''
 
 
+# --- Sensore toggle su file (ORIGINALE — backward compat) ---
+
 def _sensore_toggle(screen_path: str) -> tuple:
     """
     Deduce stato home/mappa dal pulsante toggle basso-sinistra.
@@ -180,9 +231,9 @@ def _sensore_toggle(screen_path: str) -> tuple:
     """
     use_template = getattr(config, 'STATO_TOGGLE_TEMPLATE_ABILITATO', True)
     use_ocr      = getattr(config, 'STATO_TOGGLE_OCR_ABILITATO',      True)
-    debug        = getattr(config, 'STATO_TOGGLE_DEBUG',               False)
+    debug        = config._debug_abilitato(config.DEBUG_STATO)
 
-    # ── 1. Template matching ──────────────────────────────────────────────────
+    # ── 1. Template matching ──
     if use_template:
         stato_t, desc_t = _match_toggle_template(screen_path)
         if stato_t in ('home', 'mappa'):
@@ -194,7 +245,7 @@ def _sensore_toggle(screen_path: str) -> tuple:
             try: print(f"[STATO][TOGGLE][TMPL] nessun match ({desc_t})")
             except Exception: pass
 
-    # ── 2. OCR fallback ───────────────────────────────────────────────────────
+    # ── 2. OCR fallback ──
     if use_ocr:
         txt = _ocr_testo_toggle(screen_path)
         if txt:
@@ -216,8 +267,60 @@ def _sensore_toggle(screen_path: str) -> tuple:
     return ('', '')
 
 
+# --- Sensore toggle IN MEMORIA (NUOVA — usata da rileva()) ---
+
+def _sensore_toggle_mem(pil_img, cv_img) -> tuple:
+    """
+    Come _sensore_toggle() ma lavora interamente in memoria.
+    Ordine: template matching (cv_img) → OCR fallback (pil_img, salva temp).
+    """
+    use_template = getattr(config, 'STATO_TOGGLE_TEMPLATE_ABILITATO', True)
+    use_ocr = getattr(config, 'STATO_TOGGLE_OCR_ABILITATO', True)
+    debug = config._debug_abilitato(config.DEBUG_STATO)
+
+    # ── 1. Template matching in memoria ──
+    if use_template and cv_img is not None:
+        stato_t, desc_t = _match_toggle_template_mem(cv_img)
+        if stato_t in ('home', 'mappa'):
+            if debug:
+                try: print(f"[STATO][TOGGLE][TMPL-MEM] {stato_t} ({desc_t})")
+                except Exception: pass
+            return (stato_t, desc_t)
+        if stato_t == 'overlay':
+            return (stato_t, desc_t)
+        if debug:
+            try: print(f"[STATO][TOGGLE][TMPL-MEM] nessun match ({desc_t})")
+            except Exception: pass
+
+    # ── 2. OCR fallback — Tesseract richiede file su disco ──
+    # Salviamo temp SOLO se template matching ha fallito per errore tecnico
+    # (cv_img None, template non caricati). Se 'overlay' (sotto soglia)
+    # l'OCR non aggiunge valore — l'icona toggle non è visibile.
+    if use_ocr and pil_img is not None:
+        try:
+            temp_dir  = os.path.join(config.DEBUG_DIR, "screen")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_path = os.path.join(temp_dir, "_stato_ocr_tmp.png")
+            pil_img.save(temp_path)
+            txt = _ocr_testo_toggle(temp_path)
+            if txt:
+                key_home = getattr(config, 'STATO_TOGGLE_KEY_HOME', ['REGION', 'REGIONE'])
+                key_map = getattr(config, 'STATO_TOGGLE_KEY_MAPPA', ['SHELTER', 'RIFUGIO'])
+                for k in key_home:
+                    if k and k.upper().replace(' ', '') in txt:
+                        return ('home', txt)
+                for k in key_map:
+                    if k and k.upper().replace(' ', '') in txt:
+                        return ('mappa', txt)
+        except Exception:
+            pass
+
+    return ('', '')
+
+
 # ------------------------------------------------------------------------------
-# Rileva stato corrente (senza screenshot: usa screen già scattato)
+# Rileva stato da screen già scattato (file su disco)
+# (ORIGINALE — usato da chi passa screen_path: raccolta, emulatore_base, ecc.)
 # ------------------------------------------------------------------------------
 
 def rileva_screen(screen: str, porta=None, nome=None) -> str:
@@ -257,28 +360,21 @@ def rileva_screen(screen: str, porta=None, nome=None) -> str:
         if is_beige and is_ok_yellow:
             return 'overlay'
 
-    # 2) Template matching SEMPRE per prima (Region=home, Shelter=mappa).
-    #    È il sensore primario: se trova l'icona toggle → risposta certa.
-    #    Se non trova nulla (overlay, VIP, messaggi, ecc.) → overlay.
-    #    Il pixel check viene usato solo come fallback tecnico se cv2/template
-    #    non sono disponibili (s_tmpl == '').
+    # 2) Template matching (sensore primario)
     s_tmpl, desc_tmpl = _sensore_toggle(screen)
 
-    # Trovato Region o Shelter → risposta certa
     if s_tmpl in ('home', 'mappa'):
-        if getattr(config, 'STATO_TOGGLE_DEBUG', False):
+        if config._debug_abilitato(config.DEBUG_STATO):
             try:
                 print(f"[STATO][TOGGLE] {nome or '?'}:{porta or '?'} → {s_tmpl} ({desc_tmpl})")
             except Exception:
                 pass
         return s_tmpl
 
-    # Template sotto soglia → icona toggle non visibile → siamo su un overlay
     if s_tmpl == 'overlay':
         return 'overlay'
 
-    # s_tmpl == '' → errore tecnico (cv2 mancante, template non caricati, screenshot corrotto)
-    # → fallback sul pixel check originale
+    # 3) Fallback pixel check (solo se cv2/template non disponibili)
     offsets = getattr(config, 'STATO_CHECK_OFFSETS', [(0, 0)])
     soglia_r = config.STATO_SOGLIA_R
     min_sum = getattr(config, 'STATO_MIN_MAPPA_RGB_SUM', 20)
@@ -308,21 +404,105 @@ def rileva_screen(screen: str, porta=None, nome=None) -> str:
     return 'overlay'
 
 
+# ------------------------------------------------------------------------------
+# Rileva stato da immagini IN MEMORIA
+# (NUOVA — usata internamente da rileva())
+# ------------------------------------------------------------------------------
+
+def rileva_screen_mem(pil_img, cv_img, porta=None, nome=None) -> str:
+    """
+    Rileva stato da immagini già decodificate in memoria.
+    Stessa logica di rileva_screen() ma senza I/O disco.
+
+    Parametri:
+      pil_img : PIL.Image — per pixel check (popup, fallback stato)
+      cv_img  : numpy array cv2 — per template matching (può essere None)
+    """
+    if pil_img is None:
+        return 'sconosciuto'
+
+    def _px(x, y):
+        return adb.leggi_pixel_img(pil_img, x, y)
+
+    # 1) Popup "Uscire dal gioco?" (overlay)
+    r0, g0, b0 = _px(config.POPUP_CHECK_X, config.POPUP_CHECK_Y)
+    if r0 != -1:
+        is_beige = (
+            config.BEIGE_R_MIN <= r0 <= config.BEIGE_R_MAX and
+            config.BEIGE_G_MIN <= g0 <= config.BEIGE_G_MAX and
+            config.BEIGE_B_MIN <= b0 <= config.BEIGE_B_MAX
+        )
+        rok, gok, bok = _px(config.POPUP_OK_X, config.POPUP_OK_Y)
+        is_ok_yellow = (
+            rok != -1 and
+            config.POPUP_OK_R_MIN <= rok <= config.POPUP_OK_R_MAX and
+            config.POPUP_OK_G_MIN <= gok <= config.POPUP_OK_G_MAX and
+            config.POPUP_OK_B_MIN <= bok <= config.POPUP_OK_B_MAX
+        )
+        if is_beige and is_ok_yellow:
+            return 'overlay'
+
+    # 2) Template matching in memoria (sensore primario)
+    s_tmpl, desc_tmpl = _sensore_toggle_mem(pil_img, cv_img)
+
+    if s_tmpl in ('home', 'mappa'):
+        if config._debug_abilitato(config.DEBUG_STATO):
+            try:
+                print(f"[STATO][TOGGLE-MEM] {nome or '?'}:{porta or '?'} → {s_tmpl} ({desc_tmpl})")
+            except Exception:
+                pass
+        return s_tmpl
+
+    if s_tmpl == 'overlay':
+        return 'overlay'
+
+    # 3) Fallback pixel check
+    offsets = getattr(config, 'STATO_CHECK_OFFSETS', [(0, 0)])
+    soglia_r = config.STATO_SOGLIA_R
+    min_sum = getattr(config, 'STATO_MIN_MAPPA_RGB_SUM', 20)
+
+    home_votes = 0
+    mappa_votes = 0
+    valid = 0
+
+    for dx, dy in offsets:
+        r, g, b = _px(config.STATO_CHECK_X + dx, config.STATO_CHECK_Y + dy)
+        if r == -1:
+            continue
+        valid += 1
+        if (r + g + b) < min_sum:
+            continue
+        if r < soglia_r:
+            home_votes += 1
+        else:
+            mappa_votes += 1
+
+    if valid == 0:
+        return 'sconosciuto'
+    if home_votes > mappa_votes and home_votes > 0:
+        return 'home'
+    if mappa_votes >= home_votes and mappa_votes > 0:
+        return 'mappa'
+    return 'overlay'
+
+
+# ------------------------------------------------------------------------------
+# Debug screenshot
+# ------------------------------------------------------------------------------
+
 def _salva_debug_stato(screen_path: str, stato: str, porta=None, nome=None):
     """
-    Se STATO_TOGGLE_DEBUG=True, copia lo screenshot in debug_stato/ con nome
-    {HHMMSSmmm}_{nome}_{porta}_{stato}.png
-    Permette di vedere cosa stava guardando il bot quando ha dichiarato
-    home / mappa / overlay / sconosciuto.
+    Se DEBUG_ABILITATO=True e DEBUG_STATO=True, copia lo screenshot in
+    debug/stato/ con nome {HHMMSSmmm}_{nome}_{porta}_{stato}.png
     """
-    if not getattr(config, 'STATO_TOGGLE_DEBUG', False):
+    if not config._debug_abilitato(config.DEBUG_STATO):
         return
     if not screen_path or not os.path.exists(screen_path):
         return
     try:
         import shutil
         from datetime import datetime
-        debug_dir = os.path.join(config.BOT_DIR, "debug_stato")
+        debug_dir = os.path.join(config.DEBUG_DIR, "stato")
         os.makedirs(debug_dir, exist_ok=True)
         ts = datetime.now().strftime("%H%M%S%f")[:9]
         label = f"{nome or 'x'}_{porta or 'x'}"
@@ -332,14 +512,49 @@ def _salva_debug_stato(screen_path: str, stato: str, porta=None, nome=None):
         pass
 
 
+# ------------------------------------------------------------------------------
+# Rileva stato — VERSIONE OTTIMIZZATA (exec-out + decode unico)
+#
+# Pipeline:
+#   exec-out screencap → bytes RAM → decode unico (PIL+cv2) → rilevamento
+#   in-memoria → salva su disco solo per screen_path di ritorno
+#
+# Fallback automatico: se exec-out fallisce, usa screenshot() tradizionale.
+# Retrocompatibilità: ritorna (stato, screen_path) come l'originale.
+# ------------------------------------------------------------------------------
+
 def rileva(porta: str, nome: str = None) -> tuple:
     """Scatta screenshot e rileva stato. Ritorna (stato, screen_path)."""
-    screen = adb.screenshot(porta)
-    if not screen:
+
+    # ── 1. Screenshot in memoria via exec-out ──
+    png_bytes = adb.screenshot_bytes(porta)
+
+    if not png_bytes:
+        # Fallback: metodo tradizionale (file) se exec-out fallisce
+        screen = adb.screenshot(porta)
+        if not screen:
+            return ('sconosciuto', '')
+        s = rileva_screen(screen, porta=porta, nome=nome)
+        _salva_debug_stato(screen, s, porta=porta, nome=nome)
+        return (s, screen)
+
+    # ── 2. Decode unico (PIL + cv2 dallo stesso buffer) ──
+    pil_img, cv_img = adb.decodifica_screenshot(png_bytes)
+
+    if pil_img is None:
         return ('sconosciuto', '')
-    s = rileva_screen(screen, porta=porta, nome=nome)
-    _salva_debug_stato(screen, s, porta=porta, nome=nome)
-    return (s, screen)
+
+    # ── 3. Rilevamento in memoria (zero I/O disco) ──
+    s = rileva_screen_mem(pil_img, cv_img, porta=porta, nome=nome)
+
+    # ── 4. Salva su disco per screen_path di ritorno ──
+    # Serve a: home_pulita(), verifica_ui, debug, e chiunque usi il path
+    screen_path = adb.salva_screenshot(png_bytes, porta)
+
+    # ── 5. Debug screenshot ──
+    _salva_debug_stato(screen_path, s, porta=porta, nome=nome)
+
+    return (s, screen_path)
 
 
 # ------------------------------------------------------------------------------
@@ -390,16 +605,6 @@ def _pulisci_overlay(porta: str, nome: str, logger=None) -> str:
 
 # ------------------------------------------------------------------------------
 # Rilevamento e pulizia banner home
-#
-# I banner di evento (es. Glory League) appaiono a volte al primo avvio
-# e coprono la home intera. Il toggle rimane visibile sotto il banner,
-# quindi rileva() restituisce 'home' anche con banner aperto (falso positivo).
-# Il tap sul toggle mappa viene assorbito dal banner → vai_in_mappa fallisce.
-#
-# Discriminante: luminosità media zona toggle (0,450,120,540).
-#   Home pulita:  toggle visibile → luminosità >= 40
-#   Banner aperto: zona scura    → luminosità <  40
-#   Calibrato su banner.png: luminosità = 16
 # ------------------------------------------------------------------------------
 
 _BANNER_TOGGLE_ZONA = (0, 450, 120, 540)
@@ -431,9 +636,7 @@ def pulisci_banner_home(porta: str, nome: str, logger=None) -> bool:
     """
     Chiude eventuali banner/overlay di evento sulla home inviando BACK ripetuti.
     Verifica dopo ogni ciclo la luminosità della zona toggle.
-
     Ritorna True se home pulita raggiunta, False se banner persistente.
-    Chiamare prima di vai_in_mappa quando i tap non hanno effetto.
     """
     def log(msg):
         if logger:
@@ -444,7 +647,7 @@ def pulisci_banner_home(porta: str, nome: str, logger=None) -> bool:
         return True  # fail-safe
 
     if home_pulita(screen):
-        return True  # home già pulita
+        return True
 
     log("[BANNER] banner/overlay rilevato — avvio pulizia con BACK")
 
@@ -468,6 +671,10 @@ def pulisci_banner_home(porta: str, nome: str, logger=None) -> bool:
     return False
 
 
+# ------------------------------------------------------------------------------
+# Navigazione: vai in mappa / vai in home
+# ------------------------------------------------------------------------------
+
 def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
     """Porta l'istanza in mappa. Prima pulisce overlay e banner, poi naviga."""
 
@@ -489,9 +696,7 @@ def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
         time.sleep(1.5)
         return True
 
-    # Prima di iniziare i tap: verifica che la home sia pulita da banner.
-    # I banner assorbono i tap sul toggle senza cambiare stato → vai_in_mappa
-    # fallisce silenziosamente. pulisci_banner_home usa luminosità zona toggle.
+    # Pulizia banner prima dei tap
     if screen and not home_pulita(screen):
         log("Stato attuale: home con banner — pulizia banner prima dei tap")
         pulisci_banner_home(porta, nome, logger)
@@ -522,8 +727,6 @@ def vai_in_mappa(porta: str, nome: str, logger=None) -> bool:
                 time.sleep(1.5)
                 return True
 
-        # Tap non ha portato in mappa e siamo ancora in home:
-        # possibile banner. Dopo 2 tap falliti consecutivi → pulisci banner.
         tap_falliti_consecutivi += 1
         if tap_falliti_consecutivi >= 2 and tentativo < MAX_TENTATIVI_MAPPA - 1:
             log("[BANNER] tap mappa non efficaci — possibile banner, avvio pulizia")
@@ -590,26 +793,61 @@ def vai_in_home(porta: str, nome: str, logger=None, conferme: int = 3) -> bool:
     return False
 
 
-def conta_squadre(porta: str, n_letture: int = 3) -> tuple:
-    """Legge contatore squadre X/Y via OCR. Valore più frequente, fallback (-1,-1,-1)."""
+def conta_squadre(porta: str, n_letture: int = 3, n_squadre: int = -1) -> tuple:
+    """
+    Legge contatore squadre X/Y via OCR. Valore più frequente, fallback (-1,-1,-1).
+
+    v5.24 — pipeline in-memoria: screenshot_bytes() + decodifica_screenshot() +
+    leggi_contatore_da_zona() — zero scritture disco, zero crop_zona() su file.
+
+    Logica frecce:
+      - frecce visibili   → squadre attive → leggi X/Y
+      - frecce assenti    → (0, totale_noto) — tutti gli slot liberi
+      - totale_noto usato come fallback se totale non leggibile dall'OCR
+
+    Parametri:
+      porta      : porta ADB istanza
+      n_letture  : numero letture per votazione maggioritaria (default 3)
+      n_squadre  : totale slot noto a priori (da config, es. 5) —
+                   usato come totale_noto iniziale così (0,-1) diventa (0,5)
+    """
     import ocr
+    from collections import Counter
+
     risultati = []
+    # Inizializza totale_noto con n_squadre se fornito
+    totale_noto = n_squadre if n_squadre > 0 else -1
+
     for _ in range(n_letture):
-        screen = adb.screenshot(porta)
-        if not screen:
+        png_bytes = adb.screenshot_bytes(porta)
+        if not png_bytes:
+            time.sleep(0.3)
             continue
-        crop = adb.crop_zona(screen, config.OCR_ZONA)
-        if not crop:
+
+        pil_img, _ = adb.decodifica_screenshot(png_bytes)
+        if pil_img is None:
+            time.sleep(0.3)
             continue
-        attive, totale = ocr.leggi_contatore(crop)
-        if attive != -1:
+
+        attive, totale = ocr.leggi_contatore_da_zona(pil_img, totale_noto=totale_noto)
+
+        if totale > 0:
+            totale_noto = totale   # aggiorna per le letture successive
+
+        # Accetta il risultato solo se totale è noto (>0)
+        # Scarta (0,-1): frecce assenti ma totale sconosciuto
+        if attive != -1 and totale > 0:
             risultati.append((attive, totale))
+
         time.sleep(0.3)
 
     if not risultati:
+        # Se totale_noto è noto ma tutte le letture avevano frecce assenti
+        # → tutti gli slot liberi
+        if totale_noto > 0:
+            return (0, totale_noto, totale_noto)
         return (-1, -1, -1)
 
-    from collections import Counter
     piu_comune = Counter(risultati).most_common(1)[0][0]
     attive, totale = piu_comune
     libere = max(0, totale - attive)
