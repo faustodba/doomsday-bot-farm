@@ -838,6 +838,17 @@ def _esegui_task_periodici(porta, nome, logger, coords, ciclo, ist,
             logger(nome, msg)
 
     import daily_tasks as _daily
+
+    # Boost Gathering Speed — ogni ciclo, prima di tutto il resto
+    # Nessuna schedulazione, nessuno stato persistente.
+    # Non bloccante: un errore non interrompe il resto del ciclo.
+    import boost as _boost
+    try:
+        esito_boost = _boost.esegui_boost(porta, nome, logger)
+        log(f"Boost: {esito_boost}")
+    except Exception as _e_boost:
+        log(f"Boost: errore non bloccante — {_e_boost}")
+
     if getattr(config, "STORE_ABILITATO", False):
         run_guarded_fn("Store", lambda: _daily.esegui_store_guarded(porta, nome, logger))
     else:
@@ -1130,6 +1141,23 @@ def _loop_invio_marce(porta, nome, n_truppe, obiettivo, attive_inizio, libere,
                 break
             continue
 
+        # Contatore invariato o diminuito: potrebbe essere una squadra rientrata
+        # durante l'invio (ETA breve). Se stavamo riempiendo l'ultimo slot e il
+        # contatore è diminuito, la marcia è partita ma una squadra è tornata nello
+        # stesso momento → slot effettivamente pieni. Commit e esci.
+        if attive_dopo2 != -1 and attive_dopo2 < attive_correnti and attive_correnti >= obiettivo - 1:
+            log(f"Contatore diminuito ({attive_correnti}->{attive_dopo2}): squadra rientrata durante invio "
+                f"— marcia OK, slot occupati {attive_dopo2 + 1}/{obiettivo}")
+            if chiave_nodo:
+                _blacklist_commit(blacklist, blacklist_lock, chiave_nodo, eta_s=eta_s)
+                ttl_log = f"ETA={eta_s}s" if eta_s else f"TTL={BLACKLIST_COMMITTED_TTL}s"
+                log(f"Nodo {chiave_nodo} -> COMMITTED ({ttl_log})")
+            attive_correnti = obiettivo
+            inviate        += 1
+            fallimenti_cons = 0
+            log("Slot pieni (rientro simultaneo) — uscita dal loop")
+            break
+
         log("Squadra respinta o marcia non partita - rollback nodo")
         if chiave_nodo:
             _blacklist_rollback(blacklist, blacklist_lock, chiave_nodo)
@@ -1301,6 +1329,23 @@ def raccolta_istanza(porta, nome, truppe=None, max_squadre=0, logger=None, ciclo
             ensure_home_fn=_ensure_home,
             run_guarded_fn=_run_guarded,
         )
+
+    # ------------------------------------------------------------------
+    # Attesa spedizioni rifornimento ancora in volo
+    # ------------------------------------------------------------------
+    # Il contatore squadre del gioco include anche le spedizioni di
+    # rifornimento_mappa in volo. Se vengono lette subito, conta_squadre
+    # può restituire attive > totale (es. 7/4), causando il salto della raccolta
+    # o report errato. Aspettiamo il rientro basandoci sull'ETA registrato.
+    try:
+        eta_rifmap = _status.istanza_get(nome, "rifmap_eta_residua") or 0.0
+        if eta_rifmap > 0:
+            attesa_rif = min(float(eta_rifmap), 90.0)  # cap 90s per sicurezza
+            log(f"[RIFMAP] Attesa rientro spedizioni ({attesa_rif:.0f}s) prima di conta_squadre")
+            time.sleep(attesa_rif)
+            _status.istanza_set(nome, "rifmap_eta_residua", 0.0)
+    except Exception:
+        pass  # non bloccante
 
     # ------------------------------------------------------------------
     # Contatore squadre in HOME

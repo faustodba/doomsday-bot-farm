@@ -11,8 +11,10 @@ PIN (tutti in C:\\Bot-farm\\templates\\):
   pin_arena_05_continue.png   ROI=(410,443,547,487)  soglia=0.80  [rilevamento diagnostico only]
   pin_arena_06_purchase.png   ROI=(334,143,586,185)  soglia=0.80
   pin_arena_07_glory.png      ROI=(379,418,564,447)  soglia=0.80  [popup Glory Silver / Congratulations]
-  pin_360_open.png            ROI=(140,265,325,305)  soglia=0.75  [pulsante acquisto attivo — sfondo arancione]
-  pin_360_close.png           ROI=(140,265,325,305)  soglia=0.75  [pulsante acquisto disabilitato — sfondo grigio]
+  pin_360_open.png            ROI=(140,265,325,305)  soglia=0.75  [pulsante acquisto pack 360 attivo — sfondo arancione]
+  pin_360_close.png           ROI=(140,265,325,305)  soglia=0.75  [pulsante acquisto pack 360 disabilitato — sfondo grigio]
+  pin_15_open.png             ROI=(620,390,870,425)  soglia=0.75  [pulsante acquisto pack 15 attivo — sfondo arancione]
+  pin_15_close.png            ROI=(620,390,870,425)  soglia=0.75  [pulsante acquisto pack 15 disabilitato — sfondo grigio]
 
 CHANGELOG:
   - pin_arena_07_glory: rileva il popup "Congratulations / Glory Silver" che compare
@@ -25,9 +27,13 @@ CHANGELOG:
     (fix FAU_07).
   - _attendi_fine_battaglia: delay iniziale fisso (8s) + polling ogni 3s fino a 30s
     max. Il delay iniziale copre il lag di rete/rendering schermata battaglia.
-  - Mercato Arena: _visita_mercato_arena() naviga carrello → acquista pack finché
-    pulsante attivo (arancione). run_mercato_arena() è entry point separato schedulato
-    ogni 4h (SCHEDULE_ORE_ARENA_MERCATO), indipendente dalle sfide.
+  - Mercato Arena pack 360: _visita_mercato_arena() naviga carrello → acquista pack
+    finché pulsante attivo (arancione). run_mercato_arena() è entry point separato
+    schedulato ogni 12h (SCHEDULE_ORE_ARENA_MERCATO), indipendente dalle sfide.
+  - Mercato Arena pack 15: quando pack 360 è esaurito (pulsante grigio), il loop
+    continua acquistando Random Resource Pack III (15 monete) con tap x34 fino a
+    monete esaurite (pulsante pack 15 diventa grigio). Fallback fail-safe: se
+    nessun template supera la soglia, stop acquisti.
 """
 
 import os, time, subprocess
@@ -65,15 +71,19 @@ _ATTESA_BATTAGLIA_POLL_S  = 3.0   # intervallo polling post-delay
 _ATTESA_BATTAGLIA_MAX_S   = 30.0  # timeout massimo del polling (escluso delay iniziale)
 
 _ARENA_PIN = {
-    "lista":     ("pin_arena_01_lista.png",     (387,  0,  565,  43), 0.80),
-    "challenge": ("pin_arena_02_challenge.png", (610, 434, 857, 486), 0.80),
-    "victory":   ("pin_arena_03_victory.png",   (407,  89, 557, 156), 0.80),
-    "failure":   ("pin_arena_04_failure.png",   (414,  94, 544, 146), 0.80),
-    "continue":  ("pin_arena_05_continue.png",  (410, 443, 547, 487), 0.80),
-    "purchase":  ("pin_arena_06_purchase.png",  (334, 143, 586, 185), 0.80),
+    "lista":        ("pin_arena_01_lista.png",     (387,  0,  565,  43), 0.80),
+    "challenge":    ("pin_arena_02_challenge.png", (610, 434, 857, 486), 0.80),
+    "victory":      ("pin_arena_03_victory.png",   (407,  89, 557, 156), 0.80),
+    "failure":      ("pin_arena_04_failure.png",   (414,  94, 544, 146), 0.80),
+    "continue":     ("pin_arena_05_continue.png",  (410, 443, 547, 487), 0.80),
+    "purchase":     ("pin_arena_06_purchase.png",  (334, 143, 586, 185), 0.80),
     "glory":        ("pin_arena_07_glory.png",     (379, 418, 564, 447), 0.80),
-    "btn360_open":  ("pin_360_open.png",            (140, 265, 325, 305), 0.75),
-    "btn360_close": ("pin_360_close.png",           (140, 265, 325, 305), 0.75),
+    "btn360_open":  ("pin_360_open.png",           (140, 265, 325, 305), 0.75),
+    "btn360_close": ("pin_360_close.png",          (140, 265, 325, 305), 0.75),
+    # Pack 15 — Random Resource Pack III
+    # ROI calcolata attorno al pulsante "15" in basso a destra della griglia store
+    "btn15_open":   (config.ARENA_PIN_PACK15_OPEN,  (620, 390, 870, 425), config.ARENA_PIN_PACK15_SOGLIA),
+    "btn15_close":  (config.ARENA_PIN_PACK15_CLOSE, (620, 390, 870, 425), config.ARENA_PIN_PACK15_SOGLIA),
 }
 
 _tmpl_cache = {}
@@ -240,10 +250,11 @@ def _torna_home(adb_exe, porta, log_fn=None):
     Torna in home dopo le sfide.
 
     Strategia:
-      1. Doppio tap centro schermo per chiudere overlay/risultato persistenti
-         (fix FAU_07: overlay post-arena non chiudibile con soli BACK).
+      1. Doppio tap centro schermo per chiudere overlay/risultato persistenti.
       2. Pausa 1.5s.
       3. 4x BACK per uscire dalla lista arena.
+      4. Verifica home con _vai_in_home_arena (toggle).
+      5. Fallback: KEYCODE_HOME se ancora non in home.
     """
     if log_fn: log_fn("[ARENA] ritorno HOME — doppio tap centro + BACK")
     _doppio_tap_centro(adb_exe, porta, log_fn)
@@ -251,6 +262,14 @@ def _torna_home(adb_exe, porta, log_fn=None):
     for _ in range(4):
         _back(adb_exe, porta)
         time.sleep(0.8)
+
+    # Verifica esplicita home — i 4 BACK potrebbero non bastare se c'è
+    # un overlay post-battaglia ancora aperto (stato 'sconosciuto').
+    if not _vai_in_home_arena(adb_exe, porta, log_fn):
+        if log_fn: log_fn("[ARENA] home non confermata dopo BACK — invio KEYCODE_HOME")
+        _adb(adb_exe, porta, "shell", "input", "keyevent", "3")
+        time.sleep(2.0)
+        _vai_in_home_arena(adb_exe, porta, log_fn)
 
 
 def _attendi_fine_battaglia(adb_exe, porta, log_fn=None):
@@ -387,15 +406,18 @@ def _esegui_sfida(adb_exe, porta, n, log_fn=None):
 # ------------------------------------------------------------------------------
 
 _TAP_CARRELLO    = config.ARENA_TAP_CARRELLO
-_TAP_PRIMO_ACQ   = config.ARENA_TAP_PRIMO_ACQUISTO
-_TAP_MAX_ACQ     = config.ARENA_TAP_MAX_ACQUISTO
+_TAP_PRIMO_ACQ   = config.ARENA_TAP_PRIMO_ACQUISTO   # pack 360: selettore quantità
+_TAP_MAX_ACQ     = config.ARENA_TAP_MAX_ACQUISTO      # pack 360: tap x34/max
 
-_MERCATO_MAX_ITER = 20   # guard anti-loop
+_TAP_PACK15      = config.ARENA_TAP_PACK15            # pack 15: pulsante arancione "15"
+_TAP_PACK15_MAX  = config.ARENA_TAP_PACK15_MAX        # pack 15: tap x34 (max acquistabile)
+
+_MERCATO_MAX_ITER = 20   # guard anti-loop (copre sia pack 360 che pack 15)
 
 
 def _pulsante_acquisto_attivo(screen_path: str, log_fn=None) -> bool:
     """
-    Template matching per rilevare lo stato del pulsante Intermediate Resource Pack.
+    Template matching per rilevare lo stato del pulsante pack 360 (Intermediate Resource Pack).
     Cerca prima pin_360_open (attivo/arancione): se score >= soglia → True.
     Poi verifica pin_360_close (disabilitato/grigio): se score >= soglia → False.
     Se nessuno dei due supera la soglia → False (fail-safe: non acquistare).
@@ -414,21 +436,58 @@ def _pulsante_acquisto_attivo(screen_path: str, log_fn=None) -> bool:
     return score_open > score_close
 
 
-def _visita_mercato_arena(adb_exe: str, porta: str, log_fn=None) -> int:
+def _pulsante_pack15_attivo(screen_path: str, log_fn=None) -> bool:
+    """
+    Template matching per rilevare lo stato del pulsante pack 15 (Random Resource Pack III).
+
+    Logica identica a _pulsante_acquisto_attivo ma sui template btn15_open/close.
+    Ritorna True se il pulsante è arancione (monete sufficienti).
+    Ritorna False se il pulsante è grigio (monete esaurite) oppure nessun match chiaro.
+
+    Fail-safe: se nessun template supera la soglia → False (non acquistare).
+    """
+    score_open  = _match_pin(screen_path, "btn15_open")
+    score_close = _match_pin(screen_path, "btn15_close")
+    if log_fn:
+        log_fn(f"[MERCATO-15] btn15_open={score_open:.3f} btn15_close={score_close:.3f}")
+    _, _, soglia_open  = _ARENA_PIN["btn15_open"]
+    _, _, soglia_close = _ARENA_PIN["btn15_close"]
+    if score_open >= soglia_open:
+        return True
+    if score_close >= soglia_close:
+        return False
+    # Nessun match chiaro → fail-safe stop
+    if log_fn:
+        log_fn("[MERCATO-15] nessun match chiaro btn15 — fail-safe stop")
+    return False
+
+
+def _visita_mercato_arena(adb_exe: str, porta: str, log_fn=None) -> dict:
     """
     Apre l'Arena Store e acquista tutti i pack disponibili con le monete correnti.
 
-    Flusso:
-      1. Tap carrello (905,68) → apre Arena Store  [attesa 2s]
-      2. Template matching pin_360_open/close:
-           open  → continua
-           close → stop (monete/stock esauriti)
-      3. Tap primo acquisto (235,283) → acquista 1, compaiono pulsanti quantità  [attesa 1s]
-      4. Tap pulsante destra (451,286) → acquista max disponibile (≤50)          [attesa 1.5s]
-      5. Torna a 2 — ripete finché pulsante grigio o max iterazioni
-      6. BACK → torna alla lista arena
+    Flusso priorità:
+      FASE 1 — Pack 360 (Intermediate Resource Pack):
+        1. Tap carrello (905,68) → apre Arena Store  [attesa 2s]
+        2. Template matching btn360_open/close:
+             open  → continua acquisto pack 360
+             close → pack 360 esaurito → passa a FASE 2
+        3. Tap primo acquisto (235,283) → attesa 1s
+        4. Tap max acquisto (451,286) → attesa 1.5s → acquisti_360++
+        5. Torna a 2 — ripete finché pulsante grigio o max iterazioni
 
-    Ritorna numero di cicli di acquisto eseguiti (0 = niente da comprare).
+      FASE 2 — Pack 15 (Random Resource Pack III):
+        Solo se pack 360 è esaurito (pulsante grigio).
+        1. Template matching btn15_open/close:
+             open  → continua acquisto pack 15
+             close → monete esaurite → STOP totale
+        2. Tap pulsante "15" (788,408) → attesa 1s   [apre selettore quantità]
+        3. Tap x34 (654,408) → attesa 1.5s → acquisti_15++
+        4. Ripete fino a pulsante grigio o max iterazioni residue
+
+      BACK → torna alla lista arena
+
+    Ritorna: {"acquisti_360": int, "acquisti_15": int}
     """
     def log(msg):
         if log_fn: log_fn(msg)
@@ -437,44 +496,83 @@ def _visita_mercato_arena(adb_exe: str, porta: str, log_fn=None) -> int:
     _tap(adb_exe, porta, _TAP_CARRELLO, "carrello", log_fn)
     time.sleep(2.0)
 
-    acquisti = 0
-    for _ in range(_MERCATO_MAX_ITER):
+    acquisti_360 = 0
+    acquisti_15  = 0
+    pack360_esaurito = False
+
+    for iterazione in range(_MERCATO_MAX_ITER):
         screen = _screenshot(adb_exe, porta)
         if not screen:
             log("[MERCATO] screenshot fallito — stop")
             break
 
-        if not _pulsante_acquisto_attivo(screen, log_fn):
-            log(f"[MERCATO] pulsante non attivo — stop ({acquisti} cicli)")
-            break
+        if not pack360_esaurito:
+            # ------------------------------------------------------------------
+            # FASE 1: pack 360
+            # ------------------------------------------------------------------
+            if _pulsante_acquisto_attivo(screen, log_fn):
+                log("[MERCATO-360] pulsante attivo — tap primo acquisto")
+                _tap(adb_exe, porta, _TAP_PRIMO_ACQ, "primo acquisto 360", log_fn)
+                time.sleep(1.0)
+                log("[MERCATO-360] tap max acquisto")
+                _tap(adb_exe, porta, _TAP_MAX_ACQ, "max acquisto 360", log_fn)
+                time.sleep(1.5)
+                acquisti_360 += 1
+            else:
+                log(f"[MERCATO-360] pulsante non attivo — pack 360 esaurito ({acquisti_360} cicli) → passo a pack 15")
+                pack360_esaurito = True
+                # Non fare break: continua il loop per pack 15
+                # Ri-acquisisce screen fresco per la valutazione pack 15
+                screen = _screenshot(adb_exe, porta)
+                if not screen:
+                    log("[MERCATO-15] screenshot fallito dopo switch — stop")
+                    break
+                # Valuta subito pack 15 senza attendere la prossima iterazione
+                if _pulsante_pack15_attivo(screen, log_fn):
+                    log("[MERCATO-15] pulsante attivo — tap pack 15")
+                    _tap(adb_exe, porta, _TAP_PACK15, "pack 15", log_fn)
+                    time.sleep(1.0)
+                    log("[MERCATO-15] tap x34")
+                    _tap(adb_exe, porta, _TAP_PACK15_MAX, "x34 pack 15", log_fn)
+                    time.sleep(1.5)
+                    acquisti_15 += 1
+                else:
+                    log("[MERCATO-15] pulsante pack 15 non attivo — monete esaurite, stop")
+                    break
+        else:
+            # ------------------------------------------------------------------
+            # FASE 2: pack 15 (pack 360 già esaurito nelle iterazioni precedenti)
+            # ------------------------------------------------------------------
+            if _pulsante_pack15_attivo(screen, log_fn):
+                log("[MERCATO-15] pulsante attivo — tap pack 15")
+                _tap(adb_exe, porta, _TAP_PACK15, "pack 15", log_fn)
+                time.sleep(1.0)
+                log("[MERCATO-15] tap x34")
+                _tap(adb_exe, porta, _TAP_PACK15_MAX, "x34 pack 15", log_fn)
+                time.sleep(1.5)
+                acquisti_15 += 1
+            else:
+                log(f"[MERCATO-15] pulsante non attivo — monete esaurite ({acquisti_15} cicli), stop")
+                break
 
-        log("[MERCATO] pulsante attivo — tap primo acquisto")
-        _tap(adb_exe, porta, _TAP_PRIMO_ACQ, "primo acquisto", log_fn)
-        time.sleep(1.0)
-
-        log("[MERCATO] tap max acquisto (destra)")
-        _tap(adb_exe, porta, _TAP_MAX_ACQ, "max acquisto", log_fn)
-        time.sleep(1.5)
-        acquisti += 1
-
-    log(f"[MERCATO] completato — {acquisti} cicli acquisto")
+    log(f"[MERCATO] completato — acquisti_360={acquisti_360} acquisti_15={acquisti_15}")
     _back(adb_exe, porta)
     time.sleep(1.5)
-    return acquisti
+    return {"acquisti_360": acquisti_360, "acquisti_15": acquisti_15}
 
 
 def run_mercato_arena(adb_exe, porta, log_fn=None, tap_campaign=None) -> dict:
     """
     Entry point mercato Arena — chiamabile da daily_tasks.py.
-    Schedulazione: SCHEDULE_ORE_ARENA_MERCATO (default 4h), chiave "arena_mercato".
+    Schedulazione: SCHEDULE_ORE_ARENA_MERCATO (default 12h), chiave "arena_mercato".
 
     Naviga: home → Campaign → Arena of Glory → Store → acquista → home.
     Indipendente dalle sfide giornaliere.
 
-    Ritorna: {"acquisti": int, "errore": str|None}
+    Ritorna: {"acquisti_360": int, "acquisti_15": int, "errore": str|None}
     """
     porta = str(porta)
-    risultato = {"acquisti": 0, "errore": None}
+    risultato = {"acquisti_360": 0, "acquisti_15": 0, "errore": None}
 
     def log(msg):
         if log_fn: log_fn(msg)
@@ -494,13 +592,16 @@ def run_mercato_arena(adb_exe, porta, log_fn=None, tap_campaign=None) -> dict:
         return risultato
 
     try:
-        risultato["acquisti"] = _visita_mercato_arena(adb_exe, porta, log)
+        esito = _visita_mercato_arena(adb_exe, porta, log)
+        risultato["acquisti_360"] = esito["acquisti_360"]
+        risultato["acquisti_15"]  = esito["acquisti_15"]
     except Exception as e:
         risultato["errore"] = str(e)
         log(f"[MERCATO-ARENA] errore: {e}")
 
     _torna_home(adb_exe, porta, log)
-    log(f"[MERCATO-ARENA] completato — acquisti={risultato['acquisti']}"
+    log(f"[MERCATO-ARENA] completato — acquisti_360={risultato['acquisti_360']} "
+        f"acquisti_15={risultato['acquisti_15']}"
         + (f" errore={risultato['errore']}" if risultato["errore"] else ""))
     return risultato
 
@@ -574,8 +675,6 @@ def run_arena_of_glory(adb_exe, porta, log_fn=None, tap_campaign=None):
 
         # STEP 4: verifica successo
         # Successo = esaurite rilevato OPPURE ha eseguito tutte le sfide previste
-        # Una sola sfida non basta per considerare completato (potrebbe essere un
-        # errore intermedio che ha interrotto il loop prematuramente)
         successo = risultato["esaurite"] or risultato["sfide_eseguite"] >= MAX_SFIDE
 
         log(f"[ARENA] tentativo {tentativo}: sfide={risultato['sfide_eseguite']} "

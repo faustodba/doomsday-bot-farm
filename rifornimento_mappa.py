@@ -66,7 +66,7 @@ TAP_LENTE_MAPPA     = (334,  13)   # lente coordinate sulla mappa
 TAP_CAMPO_X         = (484, 135)   # campo X nella lente
 TAP_CAMPO_Y         = (601, 135)   # campo Y nella lente
 TAP_CONFERMA_LENTE  = (670, 135)   # conferma → centra mappa
-TAP_CASTELLO_CENTER = (490, 230)   # castello rifugio dopo centratura mappa
+TAP_CASTELLO_CENTER = (480, 270)   # centro schermo dopo centratura
 
 # ── Template RESOURCE SUPPLY ───────────────────────────────────────────────────
 TEMPLATE_RESOURCE_SUPPLY = os.path.join(
@@ -333,7 +333,7 @@ def esegui_rifornimento_mappa(porta: str, nome: str,
             # raccoglitori attivi + spedizioni di rifornimento in volo.
             # È corretto: vogliamo sapere quanti slot fisici sono liberi ora.
             _aggiorna_coda(coda_volo)
-            slot = _slot_liberi(porta)
+            slot = _slot_liberi(porta, n_volo=len(coda_volo))
             log(f"Slot liberi: {slot}")
 
             if slot == 0:
@@ -351,7 +351,7 @@ def esegui_rifornimento_mappa(porta: str, nome: str,
                     log("Slot occupati, coda vuota o scaduta — attendo 30s")
                     time.sleep(30)
 
-                slot = _slot_liberi(porta)
+                slot = _slot_liberi(porta, n_volo=len(coda_volo))
                 log(f"Slot dopo attesa: {slot}")
                 if slot == 0:
                     log("Nessun slot libero dopo attesa - stop")
