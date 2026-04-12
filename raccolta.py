@@ -1171,7 +1171,12 @@ def _loop_invio_marce(porta, nome, n_truppe, obiettivo, attive_inizio, libere,
     early_exit_slot_pieni = (attive_correnti >= obiettivo)
     attive_reali          = attive_correnti
 
-    if fallimenti_cons < MAX_FALLIMENTI:
+    # Se usciti per slot pieni, non tentare recupero:
+    # il contatore post-loop potrebbe leggere un valore basso (squadre
+    # con ETA breve già rientrate) e riavviare invii su slot occupati.
+    if early_exit_slot_pieni:
+        log(f"Contatore reale: {attive_reali}/{obiettivo} — slot pieni")
+    elif fallimenti_cons < MAX_FALLIMENTI:
         try:
             if stato.vai_in_mappa(porta, nome, logger):
                 time.sleep(1.5)
