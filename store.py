@@ -489,6 +489,10 @@ def run_store(porta: str, nome: str, logger=None) -> dict:
         log(f"[STORE] Store NON trovato dopo {len(GRIGLIA)} posizioni"
             f" (best score={best_score:.3f})")
 
+    # Torna in home prima di ripristinare il banner:
+    # dopo la scan la camera è spostata e (345,63) non colpisce il banner.
+    _stato.vai_in_home(porta, nome, logger)
+
     # Ripristina banner
     _ripristina_banner(porta, stato_banner, log)
 
