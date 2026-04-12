@@ -37,11 +37,11 @@ BOT_DIR = _os.path.dirname(_os.path.abspath(__file__))
 # ==============================================================================
 
 DEBUG_DIR       = _os.path.join(BOT_DIR, "debug")
-DEBUG_ABILITATO = False   # master switch — False = nessun file debug scritto
+DEBUG_ABILITATO = True    # master switch — False = nessun file debug scritto
 
 DEBUG_RACCOLTA  = False   # salva screen fasi raccolta (debug.salva_screen)
 DEBUG_STATO     = False   # salva screen rilevamento stato
-DEBUG_SQUADRE   = False   # salva crop contatore squadre + risultati OCR
+DEBUG_SQUADRE   = True    # salva crop contatore squadre + risultati OCR
 DEBUG_ETA       = False   # salva crop OCR ETA marcia quando fallisce
 
 def _debug_path(*parti) -> str:
@@ -294,8 +294,8 @@ ARENA_TAP_RISULTATO       = (480, 468)   # Schermata risultato -> "Tap to Contin
 ARENA_TAP_CONGRATULATIONS = (480, 435)   # Popup stagionale "Congratulations" -> "Continue"
 ARENA_TAP_ESAURITE_CANCEL = (394, 331)   # Popup "Purchase more attempts?" -> "Cancel"
 ARENA_TAP_CARRELLO        = (905,  68)   # Lista Arena -> icona carrello (apre Arena Store)
-ARENA_TAP_PRIMO_ACQUISTO  = (235, 283)   # Arena Store -> tap primo acquisto pack
-ARENA_TAP_MAX_ACQUISTO    = (451, 286)   # Arena Store -> tap pulsante max quantità (≤50)
+ARENA_TAP_PRIMO_ACQUISTO  = (235, 283)   # Arena Store -> tap primo acquisto pack 360
+ARENA_TAP_MAX_ACQUISTO    = (451, 286)   # Arena Store -> tap pulsante max quantità pack 360 (≤50)
 ARENA_MAX_SFIDE           = 5            # sfide giornaliere massime
 ARENA_SCREEN_TMP          = "screen_arena.png"  # filename screenshot temporaneo arena (relativo a BOT_DIR)
 # Pixel check popup "Congratulations" — pulsante giallo "Continue"
@@ -305,6 +305,15 @@ ARENA_CONGRATS_BGR_HIGH   = (100, 210, 255)   # (B, G, R) massimo
 # Pixel check popup "Purchase more attempts?" — pulsante "Cancel" grigio chiaro
 ARENA_ESAURITE_CHECK_XY   = (390, 330)
 ARENA_ESAURITE_SOGLIA     = 180   # tutti i canali BGR > soglia = popup presente
+
+# --- Arena Store: pack da 15 monete (Random Resource Pack III) ---
+# Attivo solo quando il pack da 360 è esaurito (stock 0).
+# Loop infinito fino a monete esaurite (pulsante diventa grigio).
+ARENA_TAP_PACK15          = (788, 408)   # Arena Store -> pulsante arancione "15" monete
+ARENA_TAP_PACK15_MAX      = (654, 408)   # Arena Store -> pulsante quantità "x34" (max acquistabile)
+ARENA_PIN_PACK15_OPEN     = "pin_15_open.png"        # template pulsante 15 attivo (arancione)
+ARENA_PIN_PACK15_CLOSE    = "pin_15_close.png"  # template pulsante 15 disabilitato (grigio)
+ARENA_PIN_PACK15_SOGLIA   = 0.75                # soglia template matching pack 15
 
 # --- Coordinate Messaggi ---
 MSG_ICONA_X        = 928
@@ -425,7 +434,7 @@ STORE_ABILITATO          = False  # False = salta acquisto Mysterious Merchant S
 STORE_SOGLIA_STORE        = 0.75   # pin_store.png — edificio store nella mappa       [era 0.80]
 STORE_SOGLIA_BANNER       = 0.85   # pin_banner_aperto/chiuso.png
 STORE_SOGLIA_STORE_ATTIVO = 0.75   # pin_store_attivo.png — label Store dopo tap       [era 0.80]
-STORE_SOGLIA_CARRELLO     = 0.75   # pin_carrello.png
+STORE_SOGLIA_CARRELLO     = 0.65   # pin_carrello.png
 STORE_SOGLIA_MERCHANT     = 0.75   # pin_merchant.png — merchant aperto
 STORE_SOGLIA_MERCANTE     = 0.75   # pin_mercante.png — icona mercante sull'edificio   [era 0.80]
 STORE_SOGLIA_ACQUISTO     = 0.80   # pin_legno/pomodoro/acciaio — NON abbassare
@@ -463,8 +472,8 @@ ZAINO_MAX_RIGHE         = 5            # righe visibili senza scroll
 RIFORNIMENTO_MAX_SPEDIZIONI_CICLO = 5  # max spedizioni rifornimento per istanza in un singolo ciclo
 RIFORNIMENTO_ABILITATO         = False
 RIFORNIMENTO_MAPPA_ABILITATO   = False  # True = usa navigazione via coordinate mappa invece di lista Membri
-RIFUGIO_X                      = 702    # coordinata X mappa del rifugio destinatario
-RIFUGIO_Y                      = 533    # coordinata Y mappa del rifugio destinatario
+RIFUGIO_X                      = 687    # coordinata X mappa del rifugio destinatario
+RIFUGIO_Y                      = 532    # coordinata Y mappa del rifugio destinatario
 DOOMS_ACCOUNT                  = "FauMorfeus"
 DOOMS_AVATAR                   = "templates/avatar.png"
 RIFORNIMENTO_BTN_TEMPLATE      = "templates/btn_risorse_approv.png"       # IT
